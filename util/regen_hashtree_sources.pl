@@ -13,17 +13,17 @@ for (
    $htgen->with(word_type => 'IV', word_size => 'IVSIZE'),
 ) {
    for ($_->with(
-         elem_type    => 'nf_fieldstorage_t *',
-         elem_key     => '(x).fieldset',
-         key_type     => 'nf_fieldset_t *',
-         elem_keyhash => '(x).fieldset->hashcode',
-         elem_key_cmp => '((IV)((b) - (a)))',
-         reindex_fn   => 'nf_fieldstorage_map_reindex'.$_->word_suffix,
-         find_fn      => 'nf_fieldstorage_map_find'.$_->word_suffix,
+         elem_type     => 'nf_fieldstorage_t *',
+         elem_key_type => 'nf_fieldset_t *',
+         elem_key      => sub($self, $el_expr) { "($el_expr).fieldset" },
+         elem_keyhash  => sub($self, $el_expr) { "($el_expr).fieldset->hashcode" },
+         elem_key_cmp  => sub($self, $a, $b) { "((IV)(($b) - ($a)))" },
+         reindex_fn    => 'nf_fieldstorage_map_reindex'.$_->word_suffix,
+         find_fn       => 'nf_fieldstorage_map_find'.$_->word_suffix,
       )
    ) {
-      $_->generate_hashtree_size_macro;
-      $_->generate_hashtree_max_capacity_macro;
+      $_->hashtree_size; # generate macro
+      $_->max_capacity;  # generate macro
       $_->generate_find;
       $_->generate_reindex;
    }

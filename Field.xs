@@ -74,26 +74,57 @@ nf_fieldstorage_t * nf_fieldstorage_alloc(nf_fieldset_t *fset);
 void nf_fieldstorage_free(nf_fieldstorage_t *self);
 
 /* BEGIN GENERATED HashTree HEADERS */
+// For a given capacity, this is how many hashtable buckets will be allocated
 #define NF_HASHTREE_TABLE_COUNT(capacity) ((capacity) + ((capacity) >> 1))
 
-#define NF_HASHTREE_UINT8_T_SIZE(capacity) ((((capacity)+1)*2 + NF_HASHTREE_TABLE_COUNT(capacity)) * 1)
+// size of hashtree structure, not including element array that it is appended to
+#define NF_HASHTREE_UINT8_T_SIZE(capacity) ((((capacity)+1)*2 + NF_HASHTREE_TABLE_COUNT(capacity) * 1)
 
+// Maximum number of elements that can be indexed using this word size
 #define NF_HASHTREE_UINT8_T_MAX_CAPACITY ((1 << (1 * 8 - 1)) - 2)
 
-nf_fieldstorage_t * * nf_fieldstorage_map_find_uint8_t(nf_fieldstorage_t * *el_array, size_t capacity, nf_fieldset_t * search_key);
-bool nf_fieldstorage_map_reindex_uint8_t(nf_fieldstorage_t * *el_array, size_t capacity, size_t from_i, size_t until_i);
-#define NF_HASHTREE_UINT16_T_SIZE(capacity) ((((capacity)+1)*2 + NF_HASHTREE_TABLE_COUNT(capacity)) * 2)
+IV nf_fieldstorage_map_find_uint8_t(nf_fieldstorage_t * *el_array, size_t capacity, nf_fieldset_t * search_key);
+// For a given capacity, this is how many hashtable buckets will be allocated
+#define NF_HASHTREE_TABLE_COUNT(capacity) ((capacity) + ((capacity) >> 1))
 
+bool nf_fieldstorage_map_reindex_uint8_t(nf_fieldstorage_t * *el_array, size_t capacity, size_t from_i, size_t until_i);
+// For a given capacity, this is how many hashtable buckets will be allocated
+#define NF_HASHTREE_TABLE_COUNT(capacity) ((capacity) + ((capacity) >> 1))
+
+// For a given capacity, this is how many hashtable buckets will be allocated
+#define NF_HASHTREE_TABLE_COUNT(capacity) ((capacity) + ((capacity) >> 1))
+
+// size of hashtree structure, not including element array that it is appended to
+#define NF_HASHTREE_UINT16_T_SIZE(capacity) ((((capacity)+1)*2 + NF_HASHTREE_TABLE_COUNT(capacity) * 2)
+
+// Maximum number of elements that can be indexed using this word size
 #define NF_HASHTREE_UINT16_T_MAX_CAPACITY ((1 << (2 * 8 - 1)) - 2)
 
-nf_fieldstorage_t * * nf_fieldstorage_map_find_uint16_t(nf_fieldstorage_t * *el_array, size_t capacity, nf_fieldset_t * search_key);
-bool nf_fieldstorage_map_reindex_uint16_t(nf_fieldstorage_t * *el_array, size_t capacity, size_t from_i, size_t until_i);
-#define NF_HASHTREE_IV_SIZE(capacity) ((((capacity)+1)*2 + NF_HASHTREE_TABLE_COUNT(capacity)) * IVSIZE)
+IV nf_fieldstorage_map_find_uint16_t(nf_fieldstorage_t * *el_array, size_t capacity, nf_fieldset_t * search_key);
+// For a given capacity, this is how many hashtable buckets will be allocated
+#define NF_HASHTREE_TABLE_COUNT(capacity) ((capacity) + ((capacity) >> 1))
 
+bool nf_fieldstorage_map_reindex_uint16_t(nf_fieldstorage_t * *el_array, size_t capacity, size_t from_i, size_t until_i);
+// For a given capacity, this is how many hashtable buckets will be allocated
+#define NF_HASHTREE_TABLE_COUNT(capacity) ((capacity) + ((capacity) >> 1))
+
+// For a given capacity, this is how many hashtable buckets will be allocated
+#define NF_HASHTREE_TABLE_COUNT(capacity) ((capacity) + ((capacity) >> 1))
+
+// size of hashtree structure, not including element array that it is appended to
+#define NF_HASHTREE_IV_SIZE(capacity) ((((capacity)+1)*2 + NF_HASHTREE_TABLE_COUNT(capacity) * IVSIZE)
+
+// Maximum number of elements that can be indexed using this word size
 #define NF_HASHTREE_IV_MAX_CAPACITY ((1 << (IVSIZE * 8 - 1)) - 2)
 
-nf_fieldstorage_t * * nf_fieldstorage_map_find_IV(nf_fieldstorage_t * *el_array, size_t capacity, nf_fieldset_t * search_key);
+IV nf_fieldstorage_map_find_IV(nf_fieldstorage_t * *el_array, size_t capacity, nf_fieldset_t * search_key);
+// For a given capacity, this is how many hashtable buckets will be allocated
+#define NF_HASHTREE_TABLE_COUNT(capacity) ((capacity) + ((capacity) >> 1))
+
 bool nf_fieldstorage_map_reindex_IV(nf_fieldstorage_t * *el_array, size_t capacity, size_t from_i, size_t until_i);
+// For a given capacity, this is how many hashtable buckets will be allocated
+#define NF_HASHTREE_TABLE_COUNT(capacity) ((capacity) + ((capacity) >> 1))
+
 /* END GENERATED HashTree HEADERS */
 
 #define NF_HASHTREE_MIN_SIZE 8

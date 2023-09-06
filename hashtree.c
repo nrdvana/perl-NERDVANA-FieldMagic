@@ -54,21 +54,21 @@ struct nf_hashtree__rbnode_IV {
 
 // Look up the search_key in the hashtable, walk the tree of conflicts, and
 // return the el_array element which matched.
-nf_fieldstorage_t * * nf_fieldstorage_map_find_uint8_t(nf_fieldstorage_t * *el_array, size_t capacity, nf_fieldset_t * search_key) {
+IV nf_fieldstorage_map_find_uint8_t(nf_fieldstorage_t * *el_array, size_t capacity, nf_fieldset_t * search_key) {
    size_t table_count= NF_HASHTREE_TABLE_COUNT(capacity), hash_code, node;
    struct nf_hashtree__rbnode_uint8_t *nodes= (struct nf_hashtree__rbnode_uint8_t*) (el_array + capacity);
    uint8_t *table= (uint8_t*) (nodes + 1 + capacity);
-   hash_code= (x).fieldset->hashcode(el_array[i]) % table_count;
+   hash_code= (el_array[i]).fieldset->hashcode % table_count;
    IV cmp;
    if ((node= table[hash_code])) {
       do {
-         cmp= ((IV)((b)-(a)))((x).fieldset(el_array[node-1]), search_key);
+         cmp= ((IV)((search_key) - ((el_array[node-1]).fieldset)));
          if (!cmp)
-            return &el_array[node-1];
+            return node-1;
          node= (cmp < 0)? nodes[node].left : nodes[node].right;
       } while (node);
    }
-   return NULL;
+   return -1;
 }
 
 // balance a tree from parents[0] upward.  (parents is terminated by a 0 value)
@@ -168,7 +168,7 @@ bool nf_fieldstorage_map_reindex_uint8_t(nf_fieldstorage_t * *el_array, size_t c
    uint8_t parents[1+NF_HASHTREE_TREE_HEIGHT_LIMIT_UINT8_T];
    assert(((to_i + 1) >> (1*4) >> (1*4)) == 0); // to_i should never be more than 2^N - 2
    for (; i < until_i; i++) {
-      hash_code= (x).fieldset->hashcode(el_array[i]) % table_count;
+      hash_code= (el_array[i]).fieldset->hashcode % table_count;
       if (!table[hash_code])
          table[hash_code]= i+1; // element i uses node i+1, because 0 means NULL
       else {
@@ -178,7 +178,7 @@ bool nf_fieldstorage_map_reindex_uint8_t(nf_fieldstorage_t * *el_array, size_t c
          assert(node <= i);
          do {
             parents[++pos]= node;
-            cmp= ((IV)((b)-(a)))((x).fieldset(el_array[i]), (x).fieldset(el_array[node-1]));
+            cmp= ((IV)(((el_array[node-1]).fieldset) - ((el_array[i]).fieldset)));
             node= cmp < 0? nodes[node].left : nodes[node].right;
          } while (node && pos < NF_HASHTREE_TREE_HEIGHT_LIMIT_UINT8_T) {
          if (pos >= NF_HASHTREE_TREE_HEIGHT_LIMIT_UINT8_T)
@@ -203,21 +203,21 @@ bool nf_fieldstorage_map_reindex_uint8_t(nf_fieldstorage_t * *el_array, size_t c
 
 // Look up the search_key in the hashtable, walk the tree of conflicts, and
 // return the el_array element which matched.
-nf_fieldstorage_t * * nf_fieldstorage_map_find_uint16_t(nf_fieldstorage_t * *el_array, size_t capacity, nf_fieldset_t * search_key) {
+IV nf_fieldstorage_map_find_uint16_t(nf_fieldstorage_t * *el_array, size_t capacity, nf_fieldset_t * search_key) {
    size_t table_count= NF_HASHTREE_TABLE_COUNT(capacity), hash_code, node;
    struct nf_hashtree__rbnode_uint16_t *nodes= (struct nf_hashtree__rbnode_uint16_t*) (el_array + capacity);
    uint16_t *table= (uint16_t*) (nodes + 1 + capacity);
-   hash_code= (x).fieldset->hashcode(el_array[i]) % table_count;
+   hash_code= (el_array[i]).fieldset->hashcode % table_count;
    IV cmp;
    if ((node= table[hash_code])) {
       do {
-         cmp= ((IV)((b)-(a)))((x).fieldset(el_array[node-1]), search_key);
+         cmp= ((IV)((search_key) - ((el_array[node-1]).fieldset)));
          if (!cmp)
-            return &el_array[node-1];
+            return node-1;
          node= (cmp < 0)? nodes[node].left : nodes[node].right;
       } while (node);
    }
-   return NULL;
+   return -1;
 }
 
 // balance a tree from parents[0] upward.  (parents is terminated by a 0 value)
@@ -317,7 +317,7 @@ bool nf_fieldstorage_map_reindex_uint16_t(nf_fieldstorage_t * *el_array, size_t 
    uint16_t parents[1+NF_HASHTREE_TREE_HEIGHT_LIMIT_UINT16_T];
    assert(((to_i + 1) >> (2*4) >> (2*4)) == 0); // to_i should never be more than 2^N - 2
    for (; i < until_i; i++) {
-      hash_code= (x).fieldset->hashcode(el_array[i]) % table_count;
+      hash_code= (el_array[i]).fieldset->hashcode % table_count;
       if (!table[hash_code])
          table[hash_code]= i+1; // element i uses node i+1, because 0 means NULL
       else {
@@ -327,7 +327,7 @@ bool nf_fieldstorage_map_reindex_uint16_t(nf_fieldstorage_t * *el_array, size_t 
          assert(node <= i);
          do {
             parents[++pos]= node;
-            cmp= ((IV)((b)-(a)))((x).fieldset(el_array[i]), (x).fieldset(el_array[node-1]));
+            cmp= ((IV)(((el_array[node-1]).fieldset) - ((el_array[i]).fieldset)));
             node= cmp < 0? nodes[node].left : nodes[node].right;
          } while (node && pos < NF_HASHTREE_TREE_HEIGHT_LIMIT_UINT16_T) {
          if (pos >= NF_HASHTREE_TREE_HEIGHT_LIMIT_UINT16_T)
@@ -352,21 +352,21 @@ bool nf_fieldstorage_map_reindex_uint16_t(nf_fieldstorage_t * *el_array, size_t 
 
 // Look up the search_key in the hashtable, walk the tree of conflicts, and
 // return the el_array element which matched.
-nf_fieldstorage_t * * nf_fieldstorage_map_find_IV(nf_fieldstorage_t * *el_array, size_t capacity, nf_fieldset_t * search_key) {
+IV nf_fieldstorage_map_find_IV(nf_fieldstorage_t * *el_array, size_t capacity, nf_fieldset_t * search_key) {
    size_t table_count= NF_HASHTREE_TABLE_COUNT(capacity), hash_code, node;
    struct nf_hashtree__rbnode_IV *nodes= (struct nf_hashtree__rbnode_IV*) (el_array + capacity);
    IV *table= (IV*) (nodes + 1 + capacity);
-   hash_code= (x).fieldset->hashcode(el_array[i]) % table_count;
+   hash_code= (el_array[i]).fieldset->hashcode % table_count;
    IV cmp;
    if ((node= table[hash_code])) {
       do {
-         cmp= ((IV)((b)-(a)))((x).fieldset(el_array[node-1]), search_key);
+         cmp= ((IV)((search_key) - ((el_array[node-1]).fieldset)));
          if (!cmp)
-            return &el_array[node-1];
+            return node-1;
          node= (cmp < 0)? nodes[node].left : nodes[node].right;
       } while (node);
    }
-   return NULL;
+   return -1;
 }
 
 // balance a tree from parents[0] upward.  (parents is terminated by a 0 value)
@@ -466,7 +466,7 @@ bool nf_fieldstorage_map_reindex_IV(nf_fieldstorage_t * *el_array, size_t capaci
    IV parents[1+NF_HASHTREE_TREE_HEIGHT_LIMIT_IV];
    assert(((to_i + 1) >> (IVSIZE*4) >> (IVSIZE*4)) == 0); // to_i should never be more than 2^N - 2
    for (; i < until_i; i++) {
-      hash_code= (x).fieldset->hashcode(el_array[i]) % table_count;
+      hash_code= (el_array[i]).fieldset->hashcode % table_count;
       if (!table[hash_code])
          table[hash_code]= i+1; // element i uses node i+1, because 0 means NULL
       else {
@@ -476,7 +476,7 @@ bool nf_fieldstorage_map_reindex_IV(nf_fieldstorage_t * *el_array, size_t capaci
          assert(node <= i);
          do {
             parents[++pos]= node;
-            cmp= ((IV)((b)-(a)))((x).fieldset(el_array[i]), (x).fieldset(el_array[node-1]));
+            cmp= ((IV)(((el_array[node-1]).fieldset) - ((el_array[i]).fieldset)));
             node= cmp < 0? nodes[node].left : nodes[node].right;
          } while (node && pos < NF_HASHTREE_TREE_HEIGHT_LIMIT_IV) {
          if (pos >= NF_HASHTREE_TREE_HEIGHT_LIMIT_IV)
@@ -500,12 +500,11 @@ bool nf_fieldstorage_map_reindex_IV(nf_fieldstorage_t * *el_array, size_t capaci
 }
 
 /* END GENERATED HashTree IMPLEMENTATION */
-ON */
-}
+ys black
+         }
       }
    }
    return true;
 }
 
 /* END GENERATED HashTree IMPLEMENTATION */
-ON */

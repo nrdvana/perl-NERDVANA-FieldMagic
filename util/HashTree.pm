@@ -19,19 +19,54 @@ sub with($self, %opts) {
    bless { %$self, %opts }, ref $self
 }
 
-sub namespace    { $_[0]{namespace} // 'hashtree' }
+sub generate($self, $list, $name, $source) {
+   if (!$self->{out}{defined}{$name}) {
+      push $list->@*, $source;
+   }
+}
+
+sub namespace($self) {
+   $self->{namespace} // 'hashtree'
+}
+sub prefix_with_ns($self, $value) {
+   # apply namespace only if it doesn't already exist
+   return $value if index($value, $self->namespace) == 0;
+   return $self->namespace . '_' . $value;
+}
 
 sub word_type($self)    { $self->{word_type} // die "word_type is required" }
 sub word_suffix($self)  { $self->{word_suffix} // '_'.($self->{word_type} =~ s/\W+/_/gr) }
 sub word_size($self)    { $self->{word_size} }
+
 sub elem_type($self)    { $self->{elem_type} // die "elem_type is required" }
-sub elem_key($self)     { $self->{elem_key} // "elem_key is required" }
-sub key_type($self)     { $self->{key_type} // "IV" }
-sub elem_key_cmp($self) { $self->{elem_key_lt} // '((IV)((b)-(a)))' }
-sub elem_keyhash($self) { $self->{elem_keyhash} // $self->elem_key }
+sub elem_namespace($self) {
+   $self->{elem_namespace} // $self->prefix_with_ns($self->elem_type)
+}
+sub elem_key_type($self) {
+   $self->{elem_key_type} // "IV"
+}
+sub elem_key($self, $elem_expr) {
+   ref $self->{elem_key} eq 'CODE' or croak "elem_key coderef is required";
+   $self->{elem_key}->($self, $elem_expr);
+}
+sub elem_key_cmp($self, $p0, $p1) {
+   if ($self->{elem_key_cmp}) {
+      return $self->{elem_key_cmp}->($self, $p0, $p1);
+   } else {
+      my $macro_name= uc($self->elem_namespace . '_KEY_CMP');
+      $self->generate($self->private_decl, $macro_name, "#define $macro_name(a, b) ((IV)((b)-(a)))");
+      return "$macro_name($p0, $p1)";
+   }
+}
+sub elem_keyhash($self, $elem_expr) {
+   ref $self->{elem_keyhash} eq 'CODE' or croak "elem_keyhash coderef is required";
+   $self->{elem_keyhash}->($self, $elem_expr);
+}
+
 sub node_type($self)    { $self->{node_type} // "struct ".$self->namespace."__rbnode".$self->word_suffix }
-sub find_fn($self)      { $self->{find_fn} // $self->namespace.'_'.uc($self->elem_type).'_find'.$self->word_suffix }
-sub reindex_fn($self)   { $self->{reindex_fn} // $self->namespace.'_'.uc($self->elem_type).'_reindex'.$self->word_suffix }
+
+sub find_fn($self)      { $self->{find_fn} // $self->elem_namespace.'_find'.$self->word_suffix }
+sub reindex_fn($self)   { $self->{reindex_fn} // $self->elem_namespace.'_reindex'.$self->word_suffix }
 sub balance_fn($self)   { $self->{balance_fn} // $self->namespace.'__rbbalance'.$self->word_suffix }
 
 sub patch_header($self, $fname, $patch_markers= "GENERATED HashTree HEADERS") {
@@ -54,50 +89,44 @@ sub _patch_file($self, $fname, $patch_markers, $new_content) {
    $fh->close or die "close: $!";
 }
 
-sub generate_table_count_macro($self) {
-   my $name= uc($self->namespace).'_TABLE_COUNT';
-   unless ($self->{out}{defined}{$name}++) {
-      push $self->public_decl->@* , <<~C;
-         #define $name(capacity) ((capacity) + ((capacity) >> 1))
-         C
-   }
+sub table_count($self, $capacity) {
+   my $macro= uc($self->namespace).'_TABLE_COUNT';
+   $self->generate($self->public_decl, $macro, <<~C);
+      // For a given capacity, this is how many hashtable buckets will be allocated
+      #define $macro(capacity) ((capacity) + ((capacity) >> 1))
+      C
+   return "$macro($capacity)";
+}
+
+sub max_capacity($self) {
+   my $macro= uc($self->namespace.'_'.$self->word_type.'_MAX_CAPACITY');
+   my $ws= $self->word_size;
+   $self->generate($self->public_decl, $macro, <<~C);
+      // Maximum number of elements that can be indexed using this word size
+      #define $macro ((1 << ($ws * 8 - 1)) - 2)
+      C
+   return $macro
+}
+
+sub hashtree_size($self) {
+   my $name= uc($self->namespace.'_'.$self->word_type.'_SIZE');
+   my $ws= $self->word_size;
+   $self->generate($self->public_decl, $name, <<~C);
+      // size of hashtree structure, not including element array that it is appended to
+      #define $name(capacity) ((((capacity)+1)*2 + @{[ $self->table_count('capacity') ]} * $ws)
+      C
    return $name;
 }
 
-sub generate_hashtree_max_capacity_macro($self) {
-   my $name= uc($self->namespace).'_'.uc($self->word_type).'_MAX_CAPACITY';
-   unless ($self->{out}{defined}{$name}++) {
-      my $ws= $self->word_size;
-      push $self->public_decl->@* , <<~C;
-         #define $name ((1 << ($ws * 8 - 1)) - 2)
-         C
-   }
-   return $name;
-}
-
-sub generate_hashtree_size_macro($self) {
-   my $name= uc($self->namespace).'_'.uc($self->word_type).'_SIZE';
-   unless ($self->{out}{defined}{$name}++) {
-      my $ws= $self->word_size;
-      my $tc= $self->generate_table_count_macro;
-      push $self->public_decl->@* , <<~C;
-         #define $name(capacity) ((((capacity)+1)*2 + $tc(capacity)) * $ws)
-         C
-   }
-   return $name;
-}
-
-sub generate_tree_height_limit_macro($self) {
+sub tree_height_limit($self) {
    my $name= uc($self->namespace).'_TREE_HEIGHT_LIMIT'.uc($self->word_suffix);
-   unless ($self->{out}{defined}{$name}++) {
-      my $ws= $self->word_size;
-      push $self->private_decl->@* , <<~C;
-         // Max tree height of N nodes is log2(N) * 2
-         // Max array index range for this implementation is 0..(2^(n-1)-2)
-         // because one bit is used for flags, and zero is used as NULL.
-         #define $name (($ws * 8 - 1)*2)
-         C
-   }
+   my $ws= $self->word_size;
+   $self->generate($self->private_decl, $name, <<~C);
+      // Max tree height of N nodes is log2(N) * 2
+      // Max array index range for this implementation is 0..(2^(n-1)-2)
+      // because one bit is used for flags, and zero is used as NULL.
+      #define $name (($ws * 8 - 1)*2)
+      C
    return $name;
 }
 
@@ -141,32 +170,28 @@ sub generate_find($self) {
    return $fn if $self->{out}{defined}{$fn}++;
    
    my $node_struct= $self->generate_rb_node_struct;
-   my $table_count= $self->generate_table_count_macro;
    my $elem_type= $self->elem_type;
    my $word_type= $self->word_type;
-   my $key_type= $self->key_type;
-   my $elem_keyhash= $self->elem_keyhash;
-   my $elem_key= $self->elem_key;
-   my $elem_key_cmp= $self->elem_key_cmp;
-   push $self->public_decl->@*, "$elem_type * $fn($elem_type *el_array, size_t capacity, $key_type search_key);";
+   my $key_type= $self->elem_key_type;
+   push $self->public_decl->@*, "IV $fn($elem_type *el_array, size_t capacity, $key_type search_key);";
    push $self->private_impl->@* , <<~C;
       // Look up the search_key in the hashtable, walk the tree of conflicts, and
       // return the el_array element which matched.
-      $elem_type * $fn($elem_type *el_array, size_t capacity, $key_type search_key) {
-         size_t table_count= $table_count(capacity), hash_code, node;
+      IV $fn($elem_type *el_array, size_t capacity, $key_type search_key) {
+         size_t table_count= @{[ $self->table_count('capacity') ]}, hash_code, node;
          $node_struct *nodes= ($node_struct*) (el_array + capacity);
          $word_type *table= ($word_type*) (nodes + 1 + capacity);
-         hash_code= $elem_keyhash(el_array[i]) % table_count;
+         hash_code= @{[ $self->elem_keyhash('el_array[i]') ]} % table_count;
          IV cmp;
          if ((node= table[hash_code])) {
             do {
-               cmp= $elem_key_cmp($elem_key(el_array[node-1]), search_key);
+               cmp= @{[ $self->elem_key_cmp($self->elem_key('el_array[node-1]'), 'search_key') ]};
                if (!cmp)
-                  return &el_array[node-1];
+                  return node-1;
                node= (cmp < 0)? nodes[node].left : nodes[node].right;
             } while (node);
          }
-         return NULL;
+         return -1;
       }
       C
    return $fn;
@@ -178,13 +203,9 @@ sub generate_reindex($self) {
    
    my $node_struct= $self->generate_rb_node_struct;
    my $balance= $self->generate_rb_balance;
-   my $table_count= $self->generate_table_count_macro;
    my $elem_type= $self->elem_type;
-   my $elem_keyhash= $self->elem_keyhash;
-   my $elem_key= $self->elem_key;
-   my $elem_key_cmp= $self->elem_key_cmp;
    my $word_type= $self->word_type;
-   my $tree_height_limit= $self->generate_tree_height_limit_macro;
+   my $tree_height_limit= $self->tree_height_limit;
    my $ws= $self->word_size;
    push $self->public_decl->@*, "bool $fn($elem_type *el_array, size_t capacity, size_t from_i, size_t until_i);";
    push $self->private_impl->@* , <<~C;
@@ -193,14 +214,14 @@ sub generate_reindex($self) {
       // reindex the elements from first_i to last_i.
       // If this returns false, it means there is a fatal error in the data structure.
       bool $fn($elem_type *el_array, size_t capacity, size_t i, size_t until_i) {
-         size_t table_count= $table_count(capacity), hash_code, pos, node;
+         size_t table_count= @{[ $self->table_count('capacity') ]}, hash_code, pos, node;
          IV cmp;
          $node_struct *nodes= ($node_struct*) (el_array + capacity);
          $word_type *table= ($word_type*) (nodes + 1 + capacity);
          $word_type parents[1+$tree_height_limit];
          assert(((to_i + 1) >> ($ws*4) >> ($ws*4)) == 0); // to_i should never be more than 2^N - 2
          for (; i < until_i; i++) {
-            hash_code= $elem_keyhash(el_array[i]) % table_count;
+            hash_code= @{[ $self->elem_keyhash('el_array[i]') ]} % table_count;
             if (!table[hash_code])
                table[hash_code]= i+1; // element i uses node i+1, because 0 means NULL
             else {
@@ -210,7 +231,7 @@ sub generate_reindex($self) {
                assert(node <= i);
                do {
                   parents[++pos]= node;
-                  cmp= $elem_key_cmp($elem_key(el_array[i]), $elem_key(el_array[node-1]));
+                  cmp= @{[ $self->elem_key_cmp($self->elem_key('el_array[i]'), $self->elem_key('el_array[node-1]')) ]};
                   node= cmp < 0? nodes[node].left : nodes[node].right;
                } while (node && pos < $tree_height_limit) {
                if (pos >= $tree_height_limit)

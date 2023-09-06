@@ -15,8 +15,8 @@ for (
    for ($_->with(
          elem_type     => 'nf_fieldstorage_t *',
          elem_key_type => 'nf_fieldset_t *',
-         elem_key      => sub($self, $el_expr) { "($el_expr).fieldset" },
-         elem_keyhash  => sub($self, $el_expr) { "($el_expr).fieldset->hashcode" },
+         elem_key      => sub($self, $el_expr) { "($el_expr)->fieldset" },
+         keyhash       => sub($self, $key_expr) { "($key_expr)->storage_id" },
          elem_key_cmp  => sub($self, $a, $b) { "((IV)(($b) - ($a)))" },
          reindex_fn    => 'nf_fieldstorage_map_reindex'.$_->word_suffix,
          find_fn       => 'nf_fieldstorage_map_find'.$_->word_suffix,

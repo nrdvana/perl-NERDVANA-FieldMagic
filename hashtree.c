@@ -1,20 +1,20 @@
 /* BEGIN GENERATED HashTree IMPLEMENTATION */
 struct nf_hashtree__rbnode_uint8_t;
-static void nf_hashtree__rbbalance_uint8_t(uint8_t *tree, uint8_t *parents);
+static void nf_hashtree__rbbalance_uint8_t(struct nf_hashtree__rbnode_uint8_t *tree, uint8_t *parents);
 // Max tree height of N nodes is log2(N) * 2
 // Max array index range for this implementation is 0..(2^(n-1)-2)
 // because one bit is used for flags, and zero is used as NULL.
 #define NF_HASHTREE_TREE_HEIGHT_LIMIT_UINT8_T ((1 * 8 - 1)*2)
 
 struct nf_hashtree__rbnode_uint16_t;
-static void nf_hashtree__rbbalance_uint16_t(uint16_t *tree, uint16_t *parents);
+static void nf_hashtree__rbbalance_uint16_t(struct nf_hashtree__rbnode_uint16_t *tree, uint16_t *parents);
 // Max tree height of N nodes is log2(N) * 2
 // Max array index range for this implementation is 0..(2^(n-1)-2)
 // because one bit is used for flags, and zero is used as NULL.
 #define NF_HASHTREE_TREE_HEIGHT_LIMIT_UINT16_T ((2 * 8 - 1)*2)
 
 struct nf_hashtree__rbnode_IV;
-static void nf_hashtree__rbbalance_IV(IV *tree, IV *parents);
+static void nf_hashtree__rbbalance_IV(struct nf_hashtree__rbnode_IV *tree, IV *parents);
 // Max tree height of N nodes is log2(N) * 2
 // Max array index range for this implementation is 0..(2^(n-1)-2)
 // because one bit is used for flags, and zero is used as NULL.
@@ -58,11 +58,11 @@ IV nf_fieldstorage_map_find_uint8_t(nf_fieldstorage_t * *el_array, size_t capaci
    size_t table_count= NF_HASHTREE_TABLE_COUNT(capacity), hash_code, node;
    struct nf_hashtree__rbnode_uint8_t *nodes= (struct nf_hashtree__rbnode_uint8_t*) (el_array + capacity);
    uint8_t *table= (uint8_t*) (nodes + 1 + capacity);
-   hash_code= (el_array[i]).fieldset->hashcode % table_count;
+   hash_code= (search_key)->storage_id % table_count;
    IV cmp;
    if ((node= table[hash_code])) {
       do {
-         cmp= ((IV)((search_key) - ((el_array[node-1]).fieldset)));
+         cmp= ((IV)((search_key) - ((el_array[node-1])->fieldset)));
          if (!cmp)
             return node-1;
          node= (cmp < 0)? nodes[node].left : nodes[node].right;
@@ -73,8 +73,8 @@ IV nf_fieldstorage_map_find_uint8_t(nf_fieldstorage_t * *el_array, size_t capaci
 
 // balance a tree from parents[0] upward.  (parents is terminated by a 0 value)
 // nodes is the full array of tree nodes.
-static void nf_hashtree__rbbalance_uint8_t(uint8_t *nodes, uint8_t *parents) {
-   uint8_t pos= *parents--, parent;
+static void nf_hashtree__rbbalance_uint8_t(struct nf_hashtree__rbnode_uint8_t *nodes, uint8_t *parents) {
+   uint8_t pos= *parents--, newpos, parent;
    // if current is a black node, no rotations needed
    while (pos && nodes[pos].is_red) {
       if (!(parent= *parents))
@@ -168,7 +168,7 @@ bool nf_fieldstorage_map_reindex_uint8_t(nf_fieldstorage_t * *el_array, size_t c
    uint8_t parents[1+NF_HASHTREE_TREE_HEIGHT_LIMIT_UINT8_T];
    assert(((to_i + 1) >> (1*4) >> (1*4)) == 0); // to_i should never be more than 2^N - 2
    for (; i < until_i; i++) {
-      hash_code= (el_array[i]).fieldset->hashcode % table_count;
+      hash_code= ((el_array[i])->fieldset)->storage_id % table_count;
       if (!table[hash_code])
          table[hash_code]= i+1; // element i uses node i+1, because 0 means NULL
       else {
@@ -178,15 +178,15 @@ bool nf_fieldstorage_map_reindex_uint8_t(nf_fieldstorage_t * *el_array, size_t c
          assert(node <= i);
          do {
             parents[++pos]= node;
-            cmp= ((IV)(((el_array[node-1]).fieldset) - ((el_array[i]).fieldset)));
+            cmp= ((IV)(((el_array[node-1])->fieldset) - ((el_array[i])->fieldset)));
             node= cmp < 0? nodes[node].left : nodes[node].right;
-         } while (node && pos < NF_HASHTREE_TREE_HEIGHT_LIMIT_UINT8_T) {
-         if (pos >= NF_HASHTREE_TREE_HEIGHT_LIMIT_UINT8_T)
+         } while (node && pos < NF_HASHTREE_TREE_HEIGHT_LIMIT_UINT8_T);
+         if (pos >= NF_HASHTREE_TREE_HEIGHT_LIMIT_UINT8_T) {
             assert(pos < TREE_HEIGHT_LIMIT);
             return false; // fatal error, should never happen unless datastruct corrupt
          }
          node= parents[pos];
-         if (go_left) {
+         if (cmp < 0)
             nodes[node].left= i+1;
          else
             nodes[node].right= i+1;
@@ -207,11 +207,11 @@ IV nf_fieldstorage_map_find_uint16_t(nf_fieldstorage_t * *el_array, size_t capac
    size_t table_count= NF_HASHTREE_TABLE_COUNT(capacity), hash_code, node;
    struct nf_hashtree__rbnode_uint16_t *nodes= (struct nf_hashtree__rbnode_uint16_t*) (el_array + capacity);
    uint16_t *table= (uint16_t*) (nodes + 1 + capacity);
-   hash_code= (el_array[i]).fieldset->hashcode % table_count;
+   hash_code= (search_key)->storage_id % table_count;
    IV cmp;
    if ((node= table[hash_code])) {
       do {
-         cmp= ((IV)((search_key) - ((el_array[node-1]).fieldset)));
+         cmp= ((IV)((search_key) - ((el_array[node-1])->fieldset)));
          if (!cmp)
             return node-1;
          node= (cmp < 0)? nodes[node].left : nodes[node].right;
@@ -222,8 +222,8 @@ IV nf_fieldstorage_map_find_uint16_t(nf_fieldstorage_t * *el_array, size_t capac
 
 // balance a tree from parents[0] upward.  (parents is terminated by a 0 value)
 // nodes is the full array of tree nodes.
-static void nf_hashtree__rbbalance_uint16_t(uint16_t *nodes, uint16_t *parents) {
-   uint16_t pos= *parents--, parent;
+static void nf_hashtree__rbbalance_uint16_t(struct nf_hashtree__rbnode_uint16_t *nodes, uint16_t *parents) {
+   uint16_t pos= *parents--, newpos, parent;
    // if current is a black node, no rotations needed
    while (pos && nodes[pos].is_red) {
       if (!(parent= *parents))
@@ -317,7 +317,7 @@ bool nf_fieldstorage_map_reindex_uint16_t(nf_fieldstorage_t * *el_array, size_t 
    uint16_t parents[1+NF_HASHTREE_TREE_HEIGHT_LIMIT_UINT16_T];
    assert(((to_i + 1) >> (2*4) >> (2*4)) == 0); // to_i should never be more than 2^N - 2
    for (; i < until_i; i++) {
-      hash_code= (el_array[i]).fieldset->hashcode % table_count;
+      hash_code= ((el_array[i])->fieldset)->storage_id % table_count;
       if (!table[hash_code])
          table[hash_code]= i+1; // element i uses node i+1, because 0 means NULL
       else {
@@ -327,15 +327,15 @@ bool nf_fieldstorage_map_reindex_uint16_t(nf_fieldstorage_t * *el_array, size_t 
          assert(node <= i);
          do {
             parents[++pos]= node;
-            cmp= ((IV)(((el_array[node-1]).fieldset) - ((el_array[i]).fieldset)));
+            cmp= ((IV)(((el_array[node-1])->fieldset) - ((el_array[i])->fieldset)));
             node= cmp < 0? nodes[node].left : nodes[node].right;
-         } while (node && pos < NF_HASHTREE_TREE_HEIGHT_LIMIT_UINT16_T) {
-         if (pos >= NF_HASHTREE_TREE_HEIGHT_LIMIT_UINT16_T)
+         } while (node && pos < NF_HASHTREE_TREE_HEIGHT_LIMIT_UINT16_T);
+         if (pos >= NF_HASHTREE_TREE_HEIGHT_LIMIT_UINT16_T) {
             assert(pos < TREE_HEIGHT_LIMIT);
             return false; // fatal error, should never happen unless datastruct corrupt
          }
          node= parents[pos];
-         if (go_left) {
+         if (cmp < 0)
             nodes[node].left= i+1;
          else
             nodes[node].right= i+1;
@@ -356,11 +356,11 @@ IV nf_fieldstorage_map_find_IV(nf_fieldstorage_t * *el_array, size_t capacity, n
    size_t table_count= NF_HASHTREE_TABLE_COUNT(capacity), hash_code, node;
    struct nf_hashtree__rbnode_IV *nodes= (struct nf_hashtree__rbnode_IV*) (el_array + capacity);
    IV *table= (IV*) (nodes + 1 + capacity);
-   hash_code= (el_array[i]).fieldset->hashcode % table_count;
+   hash_code= (search_key)->storage_id % table_count;
    IV cmp;
    if ((node= table[hash_code])) {
       do {
-         cmp= ((IV)((search_key) - ((el_array[node-1]).fieldset)));
+         cmp= ((IV)((search_key) - ((el_array[node-1])->fieldset)));
          if (!cmp)
             return node-1;
          node= (cmp < 0)? nodes[node].left : nodes[node].right;
@@ -371,8 +371,8 @@ IV nf_fieldstorage_map_find_IV(nf_fieldstorage_t * *el_array, size_t capacity, n
 
 // balance a tree from parents[0] upward.  (parents is terminated by a 0 value)
 // nodes is the full array of tree nodes.
-static void nf_hashtree__rbbalance_IV(IV *nodes, IV *parents) {
-   IV pos= *parents--, parent;
+static void nf_hashtree__rbbalance_IV(struct nf_hashtree__rbnode_IV *nodes, IV *parents) {
+   IV pos= *parents--, newpos, parent;
    // if current is a black node, no rotations needed
    while (pos && nodes[pos].is_red) {
       if (!(parent= *parents))
@@ -466,7 +466,7 @@ bool nf_fieldstorage_map_reindex_IV(nf_fieldstorage_t * *el_array, size_t capaci
    IV parents[1+NF_HASHTREE_TREE_HEIGHT_LIMIT_IV];
    assert(((to_i + 1) >> (IVSIZE*4) >> (IVSIZE*4)) == 0); // to_i should never be more than 2^N - 2
    for (; i < until_i; i++) {
-      hash_code= (el_array[i]).fieldset->hashcode % table_count;
+      hash_code= ((el_array[i])->fieldset)->storage_id % table_count;
       if (!table[hash_code])
          table[hash_code]= i+1; // element i uses node i+1, because 0 means NULL
       else {
@@ -476,15 +476,15 @@ bool nf_fieldstorage_map_reindex_IV(nf_fieldstorage_t * *el_array, size_t capaci
          assert(node <= i);
          do {
             parents[++pos]= node;
-            cmp= ((IV)(((el_array[node-1]).fieldset) - ((el_array[i]).fieldset)));
+            cmp= ((IV)(((el_array[node-1])->fieldset) - ((el_array[i])->fieldset)));
             node= cmp < 0? nodes[node].left : nodes[node].right;
-         } while (node && pos < NF_HASHTREE_TREE_HEIGHT_LIMIT_IV) {
-         if (pos >= NF_HASHTREE_TREE_HEIGHT_LIMIT_IV)
+         } while (node && pos < NF_HASHTREE_TREE_HEIGHT_LIMIT_IV);
+         if (pos >= NF_HASHTREE_TREE_HEIGHT_LIMIT_IV) {
             assert(pos < TREE_HEIGHT_LIMIT);
             return false; // fatal error, should never happen unless datastruct corrupt
          }
          node= parents[pos];
-         if (go_left) {
+         if (cmp < 0)
             nodes[node].left= i+1;
          else
             nodes[node].right= i+1;
@@ -493,14 +493,6 @@ bool nf_fieldstorage_map_reindex_IV(nf_fieldstorage_t * *el_array, size_t capaci
             nf_hashtree__rbbalance_IV(nodes, parents+pos-1);
             table[hash_code]= parents[1]; // may have changed after tree balance
             nodes[parents[1]].is_red= 0; // tree root is always black
-         }
-      }
-   }
-   return true;
-}
-
-/* END GENERATED HashTree IMPLEMENTATION */
-ys black
          }
       }
    }

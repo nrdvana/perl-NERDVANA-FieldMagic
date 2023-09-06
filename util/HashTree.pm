@@ -20,7 +20,7 @@ sub with($self, %opts) {
 }
 
 sub generate($self, $list, $name, $source) {
-   if (!$self->{out}{defined}{$name}) {
+   if (!$self->{out}{defined}{$name}++) {
       push $list->@*, $source;
    }
 }
@@ -58,9 +58,14 @@ sub elem_key_cmp($self, $p0, $p1) {
       return "$macro_name($p0, $p1)";
    }
 }
+sub keyhash($self, $key_expr) {
+   ref $self->{keyhash} eq 'CODE' or croak "keyhash coderef is required";
+   $self->{keyhash}->($self, $key_expr);
+}
 sub elem_keyhash($self, $elem_expr) {
-   ref $self->{elem_keyhash} eq 'CODE' or croak "elem_keyhash coderef is required";
-   $self->{elem_keyhash}->($self, $elem_expr);
+   $self->{elem_keyhash}?
+      $self->{elem_keyhash}->($self, $elem_expr)
+      : $self->keyhash($self->elem_key($elem_expr));
 }
 
 sub node_type($self)    { $self->{node_type} // "struct ".$self->namespace."__rbnode".$self->word_suffix }
@@ -86,6 +91,7 @@ sub _patch_file($self, $fname, $patch_markers, $new_content) {
       or croak "Can't find $patch_markers in $fname";
    $fh->seek(0,0) or die "seek: $!";
    $fh->print($content) or die "write: $!";
+   $fh->truncate($fh->tell) or die "truncate: $!";
    $fh->close or die "close: $!";
 }
 
@@ -113,7 +119,7 @@ sub hashtree_size($self) {
    my $ws= $self->word_size;
    $self->generate($self->public_decl, $name, <<~C);
       // size of hashtree structure, not including element array that it is appended to
-      #define $name(capacity) ((((capacity)+1)*2 + @{[ $self->table_count('capacity') ]} * $ws)
+      #define $name(capacity) (((capacity)+1)*2 + @{[ $self->table_count('capacity') ]} * $ws)
       C
    return $name;
 }
@@ -181,7 +187,7 @@ sub generate_find($self) {
          size_t table_count= @{[ $self->table_count('capacity') ]}, hash_code, node;
          $node_struct *nodes= ($node_struct*) (el_array + capacity);
          $word_type *table= ($word_type*) (nodes + 1 + capacity);
-         hash_code= @{[ $self->elem_keyhash('el_array[i]') ]} % table_count;
+         hash_code= @{[ $self->keyhash('search_key') ]} % table_count;
          IV cmp;
          if ((node= table[hash_code])) {
             do {
@@ -233,13 +239,13 @@ sub generate_reindex($self) {
                   parents[++pos]= node;
                   cmp= @{[ $self->elem_key_cmp($self->elem_key('el_array[i]'), $self->elem_key('el_array[node-1]')) ]};
                   node= cmp < 0? nodes[node].left : nodes[node].right;
-               } while (node && pos < $tree_height_limit) {
-               if (pos >= $tree_height_limit)
+               } while (node && pos < $tree_height_limit);
+               if (pos >= $tree_height_limit) {
                   assert(pos < TREE_HEIGHT_LIMIT);
                   return false; // fatal error, should never happen unless datastruct corrupt
                }
                node= parents[pos];
-               if (go_left) {
+               if (cmp < 0)
                   nodes[node].left= i+1;
                else
                   nodes[node].right= i+1;
@@ -262,13 +268,14 @@ sub generate_rb_balance($self) {
    return $fn if $self->{out}{defined}{$fn}++;
 
    $self->generate_rb_node_struct;
-   my $word= $self->word_type;
-   push $self->private_decl->@*, "static void $fn($word *tree, $word *parents);";
+   my $word_t= $self->word_type;
+   my $node_t= $self->node_type;
+   push $self->private_decl->@*, "static void $fn($node_t *tree, $word_t *parents);";
    push $self->private_impl->@* , <<~C;
       // balance a tree from parents[0] upward.  (parents is terminated by a 0 value)
       // nodes is the full array of tree nodes.
-      static void $fn($word *nodes, $word *parents) {
-         $word pos= *parents--, parent;
+      static void $fn($node_t *nodes, $word_t *parents) {
+         $word_t pos= *parents--, newpos, parent;
          // if current is a black node, no rotations needed
          while (pos && nodes[pos].is_red) {
             if (!(parent= *parents))

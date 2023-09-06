@@ -1,0 +1,6 @@
+TYPEMAP
+nf_fieldset_t*             O_NerdvanaFieldSet
+
+INPUT
+O_NerdvanaFieldSet
+   $var= nf_fieldset_magic_get(aTHX_ $arg, OR_DIE);

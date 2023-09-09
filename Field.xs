@@ -8,8 +8,9 @@
  * nf_fieldstorage is the struct magically attached to any sub that uses fields
  */
 
-struct nf_fieldinfo;         typedef struct nf_fieldinfo nf_fieldinfo_t;
 struct nf_fieldset;          typedef struct nf_fieldset nf_fieldset_t;
+struct nf_fieldinfo;         typedef struct nf_fieldinfo nf_fieldinfo_t;
+struct nf_fieldinfo_key;     typedef struct nf_fieldinfo_key nf_fieldinfo_key_t;
 struct nf_fieldstorage_map;  typedef struct nf_fieldstorage_map nf_fieldstorage_map_t;
 struct nf_fieldstorage;      typedef struct nf_fieldstorage nf_fieldstorage_t;
 
@@ -17,35 +18,39 @@ struct nf_fieldset {
    IV storage_id;
    size_t storage_size, known_ancestor_count;
    size_t field_count, capacity;
-   nf_fieldinfo_t *fields;
+   nf_fieldinfo_t **fields;
    HV *pkg_stash, *blessed_ref;
 };
+// Used for the _find function
+struct nf_fieldinfo_key {
+   SV *name;
+   unsigned name_hashcode;
+};
 struct nf_fieldinfo {
-   size_t storage_id;
-   size_t field_idx;
    SV *name;
    unsigned name_hashcode;
    int flags;
-   #define NF_FIELDINFO_TYPE_MASK 0xFF
-   #define NF_FIELDINFO_TYPE_VIRTUAL 0
-   #define NF_FIELDINFO_TYPE_SV      1
-   #define NF_FIELDINFO_TYPE_AV      3
-   #define NF_FIELDINFO_TYPE_HV      5
-   #define NF_FIELDINFO_TYPE_IV      2
-   #define NF_FIELDINFO_TYPE_UV      4
-   #define NF_FIELDINFO_TYPE_NV      6
-   #define NF_FIELDINFO_TYPE_BV      8
-   #define NF_FIELDINFO_TYPE_PV    0xA
+   #define NF_FIELDINFO_TYPE_MASK    0xFF
+   #define NF_FIELDINFO_TYPE_VIRTUAL    0
+   #define NF_FIELDINFO_TYPE_SV         1
+   #define NF_FIELDINFO_TYPE_AV         3
+   #define NF_FIELDINFO_TYPE_HV         5
+   #define NF_FIELDINFO_INHERITED   0x100
+   #define NF_FIELDINFO_HAS_DEFAULT 0x200
+   union {
+      SV *sv;
+   } def_val;
    size_t storage_ofs;
 };
 
-#define NF_FIELDSET_AUTOCREATE 0x100
-#define OR_DIE 0x200
-nf_fieldset_t * nf_fieldset_alloc(HV *pkg_stash);
-nf_fieldset_t * nf_fieldset_dup(nf_fieldset_t *self);
-void nf_fieldset_free(nf_fieldset_t *self);
-void nf_fieldinfo_destroy(nf_fieldinfo_t *finf);
-nf_fieldinfo_t * nf_fieldset_get_field(nf_fieldset_t *self, SV *name, int flags);
+#define NF_FIELDSET_AUTOCREATE 0x10000
+#define OR_DIE 0x20000
+nf_fieldset_t * nf_fieldset_alloc(pTHX_ HV *pkg_stash);
+void nf_fieldset_extend(pTHX_ nf_fieldset_t *self, UV field_count);
+nf_fieldset_t * nf_fieldset_dup(pTHX_ nf_fieldset_t *self);
+void nf_fieldset_free(pTHX_ nf_fieldset_t *self);
+void nf_fieldinfo_destroy(pTHX_ nf_fieldinfo_t *finf);
+nf_fieldinfo_t * nf_fieldset_get_field(pTHX_ nf_fieldset_t *self, SV *name, int flags);
 
 struct nf_fieldstorage_map {
    size_t el_count, capacity;
@@ -74,43 +79,38 @@ nf_fieldstorage_t ** nf_fieldstorage_map_get(pTHX_ nf_fieldstorage_map_t **self_
 nf_fieldstorage_t * nf_fieldstorage_alloc(pTHX_ nf_fieldset_t *fset);
 nf_fieldstorage_t * nf_fieldstorage_clone(pTHX_ nf_fieldstorage_t *orig);
 void nf_fieldstorage_free(pTHX_ nf_fieldstorage_t *self);
+SV *nf_fieldstorage_field_get(pTHX_ nf_fieldstorage_t *self, size_t field_idx);
+void nf_fieldstorage_field_set(pTHX_ nf_fieldstorage_t *self, size_t field_idx, SV *value);
 
-/* BEGIN GENERATED HashTree HEADERS */
+/* BEGIN GENERATED NF_HASHTREE HEADERS */
 // For a given capacity, this is how many hashtable buckets will be allocated
-#define NF_HASHTREE_TABLE_COUNT(capacity) ((capacity) + ((capacity) >> 1))
+#define NF_HASHTREE_TABLE_BUCKETS(capacity) ((capacity) + ((capacity) >> 1))
 
-// size of hashtree structure, not including element array that it is appended to
-#define NF_HASHTREE_UINT8_T_SIZE(capacity) (((capacity)+1)*2 + NF_HASHTREE_TABLE_COUNT(capacity) * 1)
-
-// Maximum number of elements that can be indexed using this word size
-#define NF_HASHTREE_UINT8_T_MAX_CAPACITY ((1 << (1 * 8 - 1)) - 2)
-
-IV nf_fieldstorage_map_find_uint8_t(nf_fieldstorage_t * *el_array, size_t capacity, nf_fieldset_t * search_key);
-bool nf_fieldstorage_map_reindex_uint8_t(nf_fieldstorage_t * *el_array, size_t capacity, size_t from_i, size_t until_i);
-// size of hashtree structure, not including element array that it is appended to
-#define NF_HASHTREE_UINT16_T_SIZE(capacity) (((capacity)+1)*2 + NF_HASHTREE_TABLE_COUNT(capacity) * 2)
-
-// Maximum number of elements that can be indexed using this word size
-#define NF_HASHTREE_UINT16_T_MAX_CAPACITY ((1 << (2 * 8 - 1)) - 2)
-
-IV nf_fieldstorage_map_find_uint16_t(nf_fieldstorage_t * *el_array, size_t capacity, nf_fieldset_t * search_key);
-bool nf_fieldstorage_map_reindex_uint16_t(nf_fieldstorage_t * *el_array, size_t capacity, size_t from_i, size_t until_i);
-// size of hashtree structure, not including element array that it is appended to
-#define NF_HASHTREE_IV_SIZE(capacity) (((capacity)+1)*2 + NF_HASHTREE_TABLE_COUNT(capacity) * IVSIZE)
-
-// Maximum number of elements that can be indexed using this word size
-#define NF_HASHTREE_IV_MAX_CAPACITY ((1 << (IVSIZE * 8 - 1)) - 2)
-
-IV nf_fieldstorage_map_find_IV(nf_fieldstorage_t * *el_array, size_t capacity, nf_fieldset_t * search_key);
-bool nf_fieldstorage_map_reindex_IV(nf_fieldstorage_t * *el_array, size_t capacity, size_t from_i, size_t until_i);
-/* END GENERATED HashTree HEADERS */
-
-#define NF_HASHTREE_MIN_SIZE 8
+// Size of hashtree structure, not including element array that it is appended to
+// This is a function of the max capacity of elements.
 #define NF_HASHTREE_SIZE(capacity) ( \
-   (capacity) < NF_HASHTREE_MIN_SIZE? 0 \
-   : (capacity) < NF_HASHTREE_UINT8_T_MAX_CAPACITY? NF_HASHTREE_UINT8_T_SIZE(capacity) \
-   : (capacity) < NF_HASHTREE_UINT16_T_MAX_CAPACITY? NF_HASHTREE_UINT16_T_SIZE(capacity) \
-   : NF_HASHTREE_IV_SIZE(capacity) )
+   ((capacity) > 0x7FFFFFFF? 8 \
+    : (capacity) > 0x7FFF? 4 \
+    : (capacity) > 0x7F? 2 \
+    : 1 \
+   ) * ( \
+     ((capacity)+1)*2 \
+     + NF_HASHTREE_TABLE_BUCKETS(capacity) \
+   ))
+
+size_t nf_fieldset_find(void *hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, nf_fieldinfo_key_t * search_key);
+
+bool nf_fieldset_reindex(void *hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, size_t el_i, size_t last_i);
+
+bool nf_fieldset_structcheck(pTHX_ void* hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, size_t max_el);
+
+size_t nf_fieldstorage_map_find(void *hashtree, size_t capacity, nf_fieldstorage_t ** elemdata, nf_fieldset_t * search_key);
+
+bool nf_fieldstorage_map_reindex(void *hashtree, size_t capacity, nf_fieldstorage_t ** elemdata, size_t el_i, size_t last_i);
+
+bool nf_fieldstorage_map_structcheck(pTHX_ void* hashtree, size_t capacity, nf_fieldstorage_t ** elemdata, size_t max_el);
+
+/* END GENERATED NF_HASHTREE HEADERS */
 
 #include "hashtree.c"
 
@@ -122,12 +122,30 @@ nf_fieldset_t * nf_fieldset_alloc(HV *pkg_stash) {
    nf_fieldset_t *self;
    Newxz(self, 1, nf_fieldset_t);
    self->pkg_stash= pkg_stash;
+   return self;
+}
+
+void nf_fieldset_extend(pTHX_ nf_fieldset_t *self, UV count) {
+   if (count > self->capacity) {
+      size_t alloc= count * sizeof(nf_fieldinfo_t*) + NF_HASHTREE_SIZE(count);
+      Renewc(self->fields, 1, alloc, nf_fieldinfo_t*);
+      self->capacity= count;
+      // Need to clear all bytes beyond the end of self->fields+self->capacity
+      memset(self->fields + self->field_count, 0, alloc - self->field_count * sizeof(nf_fieldinfo_t*));
+      // Now re-index all the existing elements
+      if (!nf_fieldset_reindex(self->fields + count, count, self->fields, 1, self->field_count))
+         croak("Corrupt hashtree");
+   }
 }
 
 void nf_fieldset_free(pTHX_ nf_fieldset_t *self) {
    IV i;
-   for (i= self->field_count-1; i >= 0; i--)
-      nf_fieldinfo_destroy(aTHX_ self->fields+i);
+   for (i= self->field_count-1; i >= 0; i--) {
+      nf_fieldinfo_destroy(aTHX_ self->fields[i]);
+      // Every 8th element is a block allocation.
+      if (!(i & 7))
+         Safefree(self->fields[i]);
+   }
    Safefree(self->fields);
    Safefree(self);
 }
@@ -141,9 +159,75 @@ void nf_fieldinfo_destroy(pTHX_ nf_fieldinfo_t *finf) {
    }
 }
 
-nf_fieldinfo_t * nf_fieldset_get_field(nf_fieldset_t *self, SV *name, int flags) {
+nf_fieldinfo_t * nf_fieldset_add_field(pTHX_ nf_fieldset_t *self, SV *name) {
+   nf_fieldinfo_key_t key= { name, 0 };
+   size_t i;
+   STRLEN len;
+   char *name_p= SvPV(name, len);
+   PERL_HASH(key.name_hashcode, name_p, len);
+   if (nf_fieldset_find(self->fields + self->capacity, self->capacity, self->fields, &key))
+      croak("Field %s already exists", SvPV_nolen(name));
+   if (self->field_count >= self->capacity)
+      nf_fieldset_extend(aTHX_ self, (self->capacity < 48? self->capacity + 16 : self->capacity + (self->capacity >> 1)));
+   // If this is a multiple of 8, allocate a new block of fieldinfo structs.
+   i= self->field_count;
+   if (!(i & 7))
+      Newxz(self->fields[i], 8, nf_fieldinfo_t);
+   else // else find the pointer from previous
+      self->fields[i]= self->fields[i-1] + 1;
+   self->field_count++;
+   self->fields[i]->name= name;
+   SvREFCNT_inc(name);
+   self->fields[i]->name_hashcode= key.name_hashcode;
+   nf_fieldset_reindex(self->fields + self->capacity, self->capacity, self->fields, i+i, i+i);
    return NULL;
 }
+
+nf_fieldinfo_t * nf_fieldset_get_field(pTHX_ nf_fieldset_t *self, SV *name, int flags) {
+   nf_fieldinfo_key_t key= { name, 0 };
+   size_t i;
+   STRLEN len;
+   char *name_p= SvPV(name, len);
+   PERL_HASH(key.name_hashcode, name_p, len);
+   i= nf_fieldset_find(self->fields + self->capacity, self->capacity, self->fields, &key);
+   return i? self->fields[i-1] : NULL;
+}
+
+bool nf_fieldset_fieldvalue_exists(pTHX_ nf_fieldset_t *self, SV *obj, nf_fieldinfo_t *finfo) {
+   SV **sv_p;
+   int type= finfo->flags & NF_FIELDINFO_TYPE_MASK;
+   if (!(type & NF_FIELDINFO_TYPE_SV))
+      croak("Not an SV field");
+   
+}
+
+// Returns SV without incrementing ref count.
+// If SV is temporary it will be mortal.
+SV *nf_fieldstorage_field_getsv(pTHX_ nf_fieldstorage_t *self, nf_fieldinfo_t *finfo) {
+   SV **sv_p;
+   int type= finfo->flags & NF_FIELDINFO_TYPE_MASK;
+   if (!(type & NF_FIELDINFO_TYPE_SV))
+      croak("Not an SV field");
+   sv_p= (SV**)(self->data + finfo->storage_ofs);
+   // might need to apply defaults on first access
+   if (!*sv_p && finfo->flags & NF_FIELDINFO_HAS_DEFAULT) {
+      *sv_p= newSVsv(finfo->def_val.sv);
+   }
+   case NF_FIELDINFO_TYPE_SV:
+   case NF_FIELDINFO_TYPE_AV: 
+   case NF_FIELDINFO_TYPE_HV:
+      return *sv_p? *sv_p : &PL_sv_undef;
+   default:
+      croak("Unhandled variable type for field_getsv");
+   }
+   return NULL;
+}
+
+void nf_fieldstorage_field_setsv(pTHX_ nf_fieldstorage_t *self, size_t field_idx, SV *value) {
+   
+}
+
+
 
 /**********************************************************************************************\
 * fieldstorage_map_t implementation
@@ -161,10 +245,10 @@ nf_fieldstorage_map_t * nf_fieldstorage_map_alloc(pTHX_ size_t capacity) {
 
 // Take a guess that if it is being cloned, the el_count is as large as it needs to be.
 nf_fieldstorage_map_t * nf_fieldstorage_map_clone(pTHX_ nf_fieldstorage_map_t *orig) {
-   nf_fieldstorage_map_t *self= nf_fieldstorage_map_alloc(orig->el_count);
+   nf_fieldstorage_map_t *self= nf_fieldstorage_map_alloc(aTHX_ orig->el_count);
    size_t capacity;
    int i;
-   for (i= 0; i < orig->el_count; i++)
+   for (i= orig->el_count-1; i >= 0; i--)
       self->el[i]= nf_fieldstorage_clone(aTHX_ orig->el[i]);
    self->el_count= orig->el_count;
    capacity= self->capacity;
@@ -179,15 +263,15 @@ nf_fieldstorage_map_t * nf_fieldstorage_map_clone(pTHX_ nf_fieldstorage_map_t *o
 
 void nf_fieldstorage_map_free(pTHX_ nf_fieldstorage_map_t *self) {
    int i;
-   for (i= 0; i < self->el_count; i++)
-      nf_fieldstorage_free(self->el[i]);
+   for (i= self->el_count-1; i >= 0; i--)
+      nf_fieldstorage_free(aTHX_ self->el[i]);
    Safefree(self);
 }
 
 nf_fieldstorage_t ** nf_fieldstorage_map_get(pTHX_ nf_fieldstorage_map_t **self_p, nf_fieldset_t *fset, int flags) {
    nf_fieldstorage_map_t *self, *newself;
    size_t capacity, i;
-   nf_fieldstorage_t *fstmp, **found;
+   nf_fieldstorage_t *fstmp, **found= NULL;
    int j;
    if (!(self= *self_p)) { // initial allocation
       if (!(flags & NF_FIELDSTORAGE_AUTOCREATE))
@@ -200,16 +284,16 @@ nf_fieldstorage_t ** nf_fieldstorage_map_get(pTHX_ nf_fieldstorage_map_t **self_
    }
    capacity= self->capacity;
    if (capacity < NF_HASHTREE_MIN_SIZE) {
-      for (j= self->el_count; j >= 0; j--)
+      for (j= self->el_count-1; j >= 0; j--)
          if (self->el[j]->fieldset == fset) {
             found= self->el + j;
             break;
          }
    } else {
-      j= capacity <= NF_HASHTREE_UINT8_T_MAX_CAPACITY? nf_fieldstorage_map_find_uint8_t(self->el, capacity, fset)
-      : capacity <= NF_HASHTREE_UINT16_T_MAX_CAPACITY? nf_fieldstorage_map_find_uint16_t(self->el, capacity, fset)
+      j= capacity <= NF_HASHTREE_8_MAX_CAPACITY? nf_fieldstorage_map_find_8(self->el, capacity, fset)
+      : capacity <= NF_HASHTREE_16_MAX_CAPACITY? nf_fieldstorage_map_find_16(self->el, capacity, fset)
       : nf_fieldstorage_map_find_IV(self->el, capacity, fset);
-      found= j < 0? NULL : (self->el + j);
+      if (j >= 0) found= self->el + j;
    }
    // Not found?
    if (found) {
@@ -218,7 +302,7 @@ nf_fieldstorage_t ** nf_fieldstorage_map_get(pTHX_ nf_fieldstorage_map_t **self_
          // No need to re-initialize, because the opcode does that on demand, just make sure
          // the buffer is the full size.
          if (!(fstmp= saferealloc(*found, sizeof(nf_fieldstorage_t) + (*found)->fieldset->storage_size)))
-            croak("realloc %d", sizeof(nf_fieldstorage_t) + (*found)->fieldset->storage_size);
+            croak("realloc %ld", (long)(sizeof(nf_fieldstorage_t) + (*found)->fieldset->storage_size));
          *found= fstmp;
       }
    } else if (flags & NF_FIELDSTORAGE_AUTOCREATE) {
@@ -238,10 +322,10 @@ nf_fieldstorage_t ** nf_fieldstorage_map_get(pTHX_ nf_fieldstorage_map_t **self_
       // Allocate the fieldstorage and index it
       found= self->el + self->el_count++;
       *found= nf_fieldstorage_alloc(aTHX_ fset);
-      if (capacity >= NF_HASHTREE_MIN_SIZE && capacity <= NF_HASHTREE_UINT8_T_MAX_CAPACITY)
-         nf_fieldstorage_map_reindex_uint8_t(self->el, capacity, i, self->el_count);
-      else if (capacity <= NF_HASHTREE_UINT16_T_MAX_CAPACITY)
-         nf_fieldstorage_map_reindex_uint16_t(self->el, capacity, i, self->el_count);
+      if (capacity >= NF_HASHTREE_MIN_SIZE && capacity <= NF_HASHTREE_8_MAX_CAPACITY)
+         nf_fieldstorage_map_reindex_8(self->el, capacity, i, self->el_count);
+      else if (capacity <= NF_HASHTREE_16_MAX_CAPACITY)
+         nf_fieldstorage_map_reindex_16(self->el, capacity, i, self->el_count);
       else
          nf_fieldstorage_map_reindex_IV(self->el, capacity, i, self->el_count);
    }
@@ -249,6 +333,8 @@ nf_fieldstorage_t ** nf_fieldstorage_map_get(pTHX_ nf_fieldstorage_map_t **self_
 }
 
 nf_fieldstorage_t * nf_fieldstorage_alloc(pTHX_ nf_fieldset_t *fset) {
+   int i;
+   char *dest_p;
    nf_fieldstorage_t *self= (nf_fieldstorage_t *) safecalloc(
       sizeof(nf_fieldstorage_t)
       + fset->storage_size,
@@ -263,29 +349,35 @@ nf_fieldstorage_t * nf_fieldstorage_clone(pTHX_ nf_fieldstorage_t *orig) {
    nf_fieldstorage_t *self= nf_fieldstorage_alloc(aTHX_ orig->fieldset);
    nf_fieldinfo_t *finfo;
    int i, type;
-   SV *sv;
+   SV **sv_p;
    for (i= orig->field_count-1; i >= 0; i--) {
       finfo= self->fieldset->fields+i;
-      type= finfo->flags & NF_FIELDINFO_TYPE_MASK;
-      if (type & NF_FIELDINFO_TYPE_SV) {
+      if (finfo->flags & NF_FIELDINFO_TYPE_SV) {
          // TODO: when cloning for threads, is this good enough?
          // Will the new interpreter try to share CoW with the old?
-         sv= (SV*)(self->data + finfo->storage_ofs);
-         if (sv) *((SV**)(self->data + finfo->storage_ofs))= newSVsv(sv);
+         sv_p= (SV**)(self->data + finfo->storage_ofs);
+         if (*sv_p) {
+            switch (finfo->flags & NF_FIELDINFO_TYPE_MASK) {
+            case NF_FIELDINFO_TYPE_SV: *sv_p= newSVsv(*sv_p); break;
+            case NF_FIELDINFO_TYPE_AV: *sv_p= (SV*) av_make(1+av_len((AV*) *sv_p), AvARRAY((AV*) *sv_p)); break;
+            case NF_FIELDINFO_TYPE_HV: *sv_p= (SV*) newHVhv((HV*) *sv_p); break;
+            default: croak("bug");
+            }
+         }
       }
    }
+   return self;
 }
 
 void nf_fieldstorage_free(pTHX_ nf_fieldstorage_t *self) {
    nf_fieldinfo_t *finfo;
-   SV *sv;
+   SV **sv_p;
    int i, type;
    for (i= self->field_count-1; i >= 0; i--) {
       finfo= self->fieldset->fields+i;
-      type= finfo->flags & NF_FIELDINFO_TYPE_MASK;
-      if (type & NF_FIELDINFO_TYPE_SV) {
-         sv= (SV*)(self->data + finfo->storage_ofs);
-         if (sv) SvREFCNT_dec(sv);
+      if (finfo->flags & NF_FIELDINFO_TYPE_SV) {
+         sv_p= (SV**)(self->data + finfo->storage_ofs);
+         if (*sv_p) SvREFCNT_dec(*sv_p);
       }
    }
    SvREFCNT_dec(self->fieldset->pkg_stash);
@@ -385,7 +477,7 @@ static nf_fieldset_t* nf_fieldset_magic_get(pTHX_ SV *sv, int flags) {
    // obj should now be pointing at a package stash with extension magic attached
    if (SvMAGICAL(sv)) {
       /* Iterate magic attached to this scalar, looking for one with our vtable */
-      for (magic= SvMAGIC(SvRV(sv)); magic; magic = magic->mg_moremagic)
+      for (magic= SvMAGIC(sv); magic; magic = magic->mg_moremagic)
          if (magic->mg_type == PERL_MAGIC_ext && magic->mg_virtual == &nf_fieldset_magic_vt)
             return (nf_fieldset_t*) &magic->mg_ptr;
    }
@@ -414,7 +506,7 @@ fieldset_for_package(pkg)
    SV *pkg
    INIT:
       HV *pkg_stash;
-      IV pkg_str_len;
+      UV pkg_str_len;
       const char *pkg_str= SvPV(pkg, pkg_str_len);
       nf_fieldset_t *fs;
    PPCODE:
@@ -422,9 +514,26 @@ fieldset_for_package(pkg)
       if (!pkg_stash)
          croak("No such package '%s'", pkg_str);
       fs= nf_fieldset_magic_get(aTHX_ (SV*) pkg_stash, NF_FIELDSET_AUTOCREATE);
+      (void)fs;
       ST(0)= sv_2mortal(newRV_noinc(newRV_inc((SV*) pkg_stash)));
       sv_bless(ST(0), gv_stashpvn("NERDVANA::Field::FieldSet", 25, GV_ADD));
       XSRETURN(1);
+
+void
+read_field(obj, fieldset, field_idx)
+   SV *obj
+   nf_fieldset_t *fieldset
+   UV field_idx
+   INIT:
+      nf_fieldstorage_t *fstor;
+      nf_fieldinfo_t *finf;
+   PPCODE:
+      if (!sv_isobject(obj))
+         croak("read_field can only be called on objects");
+      fstor= nf_fieldstorage_magic_get(aTHX_ SvRV(obj), fieldset, 0);
+      if (fstor && field_idx < fstor->field_count) {
+         finf= fieldset->fields + field_idx;
+         finf->
 
 MODULE = NERDVANA::Field                  PACKAGE = NERDVANA::Field::FieldSet
 
@@ -443,5 +552,6 @@ get_field(fs, name)
    INIT:
       nf_fieldinfo_t *field= nf_fieldset_get_field(fs, name, 0);
    PPCODE:
-      ST(0)= &PL_sv_undef;
+      ST(0)= field? newSVuv((UV)field) : &PL_sv_undef;
       XSRETURN(1);
+

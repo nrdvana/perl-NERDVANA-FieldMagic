@@ -7,12 +7,12 @@ static void nf_hashtree_rb_balance_31(uint32_t *hashtree, uint32_t *parents);
 
 // Look up the search_key in the hashtable, walk the tree of conflicts, and
 // return the element index which matched.
-size_t nf_fieldset_find(void *hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, nf_fieldinfo_key_t * search_key) {
-   size_t n_buckets= NF_HASHTREE_TABLE_BUCKETS(capacity), node;
+size_t nf_fieldset_hashtree_find(void *hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, nf_fieldinfo_key_t * search_key) {
+   size_t n_buckets= NF_HASHTREE_TABLE_BUCKETS(capacity);
    size_t el_hashcode, key_hashcode= ( (search_key)->name_hashcode );
    int cmp;
-   if (capacity <= 0x7F) {
-      uint8_t *bucket= ((uint8_t *)hashtree) + (1 + capacity + key_hashcode % n_buckets);
+    if (capacity <= 0x7F) {
+      uint8_t node, *bucket= ((uint8_t *)hashtree) + (1 + capacity + key_hashcode % n_buckets);
       if ((node= *bucket)) {
          do {
             el_hashcode= ( (elemdata)[(node)-1]->name_hashcode );
@@ -22,10 +22,9 @@ size_t nf_fieldset_find(void *hashtree, size_t capacity, nf_fieldinfo_t ** elemd
             node= ((uint8_t *)hashtree)[ node*2 + (cmp < 0)? 0 : 1 ] >> 1;
          } while (node);
       }
-      return node;
    }
-   if (capacity <= 0x7FFF) {
-      uint16_t *bucket= ((uint16_t *)hashtree) + (1 + capacity + key_hashcode % n_buckets);
+   else  if (capacity <= 0x7FFF) {
+      uint16_t node, *bucket= ((uint16_t *)hashtree) + (1 + capacity + key_hashcode % n_buckets);
       if ((node= *bucket)) {
          do {
             el_hashcode= ( (elemdata)[(node)-1]->name_hashcode );
@@ -35,10 +34,9 @@ size_t nf_fieldset_find(void *hashtree, size_t capacity, nf_fieldinfo_t ** elemd
             node= ((uint16_t *)hashtree)[ node*2 + (cmp < 0)? 0 : 1 ] >> 1;
          } while (node);
       }
-      return node;
    }
-   if (capacity <= 0x7FFFFFFF) {
-      uint32_t *bucket= ((uint32_t *)hashtree) + (1 + capacity + key_hashcode % n_buckets);
+   else  if (capacity <= 0x7FFFFFFF) {
+      uint32_t node, *bucket= ((uint32_t *)hashtree) + (1 + capacity + key_hashcode % n_buckets);
       if ((node= *bucket)) {
          do {
             el_hashcode= ( (elemdata)[(node)-1]->name_hashcode );
@@ -48,7 +46,6 @@ size_t nf_fieldset_find(void *hashtree, size_t capacity, nf_fieldinfo_t ** elemd
             node= ((uint32_t *)hashtree)[ node*2 + (cmp < 0)? 0 : 1 ] >> 1;
          } while (node);
       }
-      return node;
    }
    return 0;
 }
@@ -316,12 +313,12 @@ static void nf_hashtree_rb_balance_31(uint32_t *hashtree, uint32_t *parents) {
    }
 }
 
-bool nf_fieldset_reindex(void *hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, size_t el_i, size_t last_i) {
-   size_t n_buckets= NF_HASHTREE_TABLE_BUCKETS(capacity), node;
+bool nf_fieldset_hashtree_reindex(void *hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, size_t el_i, size_t last_i) {
+   size_t n_buckets= NF_HASHTREE_TABLE_BUCKETS(capacity);
    size_t el_hashcode, new_hashcode, pos;
    IV cmp;
    if (capacity <= 0x7F) {
-      uint8_t *bucket, *parent_ptr, parents[1+16];
+      uint8_t *bucket, node, tree_ref, parents[1+16];
       for (; el_i <= last_i; el_i++) {
          new_hashcode= ( (elemdata)[(el_i)-1]->name_hashcode );
          bucket= ((uint8_t *)hashtree) + (1 + capacity + new_hashcode % n_buckets);
@@ -329,7 +326,6 @@ bool nf_fieldset_reindex(void *hashtree, size_t capacity, nf_fieldinfo_t ** elem
             *bucket= el_i;
          else {
             // red/black insert
-            parents[0]= 0; // mark end of list
             pos= 0;
             assert(node < el_i);
             do {
@@ -337,20 +333,21 @@ bool nf_fieldset_reindex(void *hashtree, size_t capacity, nf_fieldinfo_t ** elem
                el_hashcode= ( (elemdata)[(node)-1]->name_hashcode );
                cmp= new_hashcode == el_hashcode? (( sv_cmp((elemdata)[(el_i)-1]->name, (elemdata)[(node)-1]->name) ))
                   : new_hashcode < el_hashcode? -1 : 1;
-               parent_ptr= &((uint8_t *)hashtree)[ node*2 + (cmp < 0)? 0 : 1 ];
-               node= *parent_ptr >> 1;
+               tree_ref= node*2 + (cmp < 0)? 0 : 1;
+               node= ((uint8_t *)hashtree)[tree_ref] >> 1;
             } while (node && pos < 16);
             if (pos > 16) {
                assert(pos <= 16);
                return false; // fatal error, should never happen unless datastruct corrupt
             }
             // Set left or right pointer of node to new node
-            *parent_ptr |= el_i << 1;
+            ((uint8_t *)hashtree)[tree_ref] |= el_i << 1;
             // Set color of new node to red. other fields should be initialized to zero already
             // Note that this is never the root of the tree because that happens automatically
             // above when *bucket= el_i and node[el_i] is assumed to be zeroed (black) already.
             ((uint8_t *)hashtree)[ el_i*2 ]= 1;
             if (pos > 1) { // no need to balance unless more than 1 parent
+               parents[0]= 0; // mark end of list
                nf_hashtree_rb_balance_7((uint8_t *)hashtree, parents+pos);
                *bucket= parents[1]; // may have changed after tree balance
                // tree root is always black
@@ -361,7 +358,7 @@ bool nf_fieldset_reindex(void *hashtree, size_t capacity, nf_fieldinfo_t ** elem
       return true;
    }
    if (capacity <= 0x7FFF) {
-      uint16_t *bucket, *parent_ptr, parents[1+32];
+      uint16_t *bucket, node, tree_ref, parents[1+32];
       for (; el_i <= last_i; el_i++) {
          new_hashcode= ( (elemdata)[(el_i)-1]->name_hashcode );
          bucket= ((uint16_t *)hashtree) + (1 + capacity + new_hashcode % n_buckets);
@@ -369,7 +366,6 @@ bool nf_fieldset_reindex(void *hashtree, size_t capacity, nf_fieldinfo_t ** elem
             *bucket= el_i;
          else {
             // red/black insert
-            parents[0]= 0; // mark end of list
             pos= 0;
             assert(node < el_i);
             do {
@@ -377,20 +373,21 @@ bool nf_fieldset_reindex(void *hashtree, size_t capacity, nf_fieldinfo_t ** elem
                el_hashcode= ( (elemdata)[(node)-1]->name_hashcode );
                cmp= new_hashcode == el_hashcode? (( sv_cmp((elemdata)[(el_i)-1]->name, (elemdata)[(node)-1]->name) ))
                   : new_hashcode < el_hashcode? -1 : 1;
-               parent_ptr= &((uint16_t *)hashtree)[ node*2 + (cmp < 0)? 0 : 1 ];
-               node= *parent_ptr >> 1;
+               tree_ref= node*2 + (cmp < 0)? 0 : 1;
+               node= ((uint16_t *)hashtree)[tree_ref] >> 1;
             } while (node && pos < 32);
             if (pos > 32) {
                assert(pos <= 32);
                return false; // fatal error, should never happen unless datastruct corrupt
             }
             // Set left or right pointer of node to new node
-            *parent_ptr |= el_i << 1;
+            ((uint16_t *)hashtree)[tree_ref] |= el_i << 1;
             // Set color of new node to red. other fields should be initialized to zero already
             // Note that this is never the root of the tree because that happens automatically
             // above when *bucket= el_i and node[el_i] is assumed to be zeroed (black) already.
             ((uint16_t *)hashtree)[ el_i*2 ]= 1;
             if (pos > 1) { // no need to balance unless more than 1 parent
+               parents[0]= 0; // mark end of list
                nf_hashtree_rb_balance_15((uint16_t *)hashtree, parents+pos);
                *bucket= parents[1]; // may have changed after tree balance
                // tree root is always black
@@ -401,7 +398,7 @@ bool nf_fieldset_reindex(void *hashtree, size_t capacity, nf_fieldinfo_t ** elem
       return true;
    }
    if (capacity <= 0x7FFFFFFF) {
-      uint32_t *bucket, *parent_ptr, parents[1+64];
+      uint32_t *bucket, node, tree_ref, parents[1+64];
       for (; el_i <= last_i; el_i++) {
          new_hashcode= ( (elemdata)[(el_i)-1]->name_hashcode );
          bucket= ((uint32_t *)hashtree) + (1 + capacity + new_hashcode % n_buckets);
@@ -409,7 +406,6 @@ bool nf_fieldset_reindex(void *hashtree, size_t capacity, nf_fieldinfo_t ** elem
             *bucket= el_i;
          else {
             // red/black insert
-            parents[0]= 0; // mark end of list
             pos= 0;
             assert(node < el_i);
             do {
@@ -417,20 +413,21 @@ bool nf_fieldset_reindex(void *hashtree, size_t capacity, nf_fieldinfo_t ** elem
                el_hashcode= ( (elemdata)[(node)-1]->name_hashcode );
                cmp= new_hashcode == el_hashcode? (( sv_cmp((elemdata)[(el_i)-1]->name, (elemdata)[(node)-1]->name) ))
                   : new_hashcode < el_hashcode? -1 : 1;
-               parent_ptr= &((uint32_t *)hashtree)[ node*2 + (cmp < 0)? 0 : 1 ];
-               node= *parent_ptr >> 1;
+               tree_ref= node*2 + (cmp < 0)? 0 : 1;
+               node= ((uint32_t *)hashtree)[tree_ref] >> 1;
             } while (node && pos < 64);
             if (pos > 64) {
                assert(pos <= 64);
                return false; // fatal error, should never happen unless datastruct corrupt
             }
             // Set left or right pointer of node to new node
-            *parent_ptr |= el_i << 1;
+            ((uint32_t *)hashtree)[tree_ref] |= el_i << 1;
             // Set color of new node to red. other fields should be initialized to zero already
             // Note that this is never the root of the tree because that happens automatically
             // above when *bucket= el_i and node[el_i] is assumed to be zeroed (black) already.
             ((uint32_t *)hashtree)[ el_i*2 ]= 1;
             if (pos > 1) { // no need to balance unless more than 1 parent
+               parents[0]= 0; // mark end of list
                nf_hashtree_rb_balance_31((uint32_t *)hashtree, parents+pos);
                *bucket= parents[1]; // may have changed after tree balance
                // tree root is always black
@@ -466,7 +463,7 @@ static int nf_hashtree_treecheck_7(uint8_t *hashtree, size_t max_node, size_t no
 
 // Verify that every filled bucket refers to a valid tree,
 // and that every node can be found.
-static bool nf_fieldset_structcheck_7(pTHX_ uint8_t *hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, size_t max_el) {
+static bool nf_fieldset_hashtree_structcheck_7(pTHX_ uint8_t *hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, size_t max_el) {
    size_t n_buckets= NF_HASHTREE_TABLE_BUCKETS(capacity), node;
    size_t el_hashcode, i_hashcode;
    int cmp, i, depth, blackcount;
@@ -552,7 +549,7 @@ static int nf_hashtree_treecheck_15(uint16_t *hashtree, size_t max_node, size_t 
 
 // Verify that every filled bucket refers to a valid tree,
 // and that every node can be found.
-static bool nf_fieldset_structcheck_15(pTHX_ uint16_t *hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, size_t max_el) {
+static bool nf_fieldset_hashtree_structcheck_15(pTHX_ uint16_t *hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, size_t max_el) {
    size_t n_buckets= NF_HASHTREE_TABLE_BUCKETS(capacity), node;
    size_t el_hashcode, i_hashcode;
    int cmp, i, depth, blackcount;
@@ -638,7 +635,7 @@ static int nf_hashtree_treecheck_31(uint32_t *hashtree, size_t max_node, size_t 
 
 // Verify that every filled bucket refers to a valid tree,
 // and that every node can be found.
-static bool nf_fieldset_structcheck_31(pTHX_ uint32_t *hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, size_t max_el) {
+static bool nf_fieldset_hashtree_structcheck_31(pTHX_ uint32_t *hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, size_t max_el) {
    size_t n_buckets= NF_HASHTREE_TABLE_BUCKETS(capacity), node;
    size_t el_hashcode, i_hashcode;
    int cmp, i, depth, blackcount;
@@ -703,24 +700,24 @@ static bool nf_fieldset_structcheck_31(pTHX_ uint32_t *hashtree, size_t capacity
 
 // Verify that every filled bucket refers to a valid tree,
 // and that every element can be found.
-bool nf_fieldset_structcheck(pTHX_ void* hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, size_t max_el) {
+bool nf_fieldset_hashtree_structcheck(pTHX_ void* hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, size_t max_el) {
    if (capacity < 0x7F)
-      return nf_fieldset_structcheck_7(aTHX_ (uint8_t*)hashtree, capacity, elemdata, max_el);
+      return nf_fieldset_hashtree_structcheck_7(aTHX_ (uint8_t*)hashtree, capacity, elemdata, max_el);
    if (capacity < 0x7FFF)
-      return nf_fieldset_structcheck_15(aTHX_ (uint16_t*)hashtree, capacity, elemdata, max_el);
+      return nf_fieldset_hashtree_structcheck_15(aTHX_ (uint16_t*)hashtree, capacity, elemdata, max_el);
    if (capacity < 0x7FFFFFFF)
-      return nf_fieldset_structcheck_31(aTHX_ (uint32_t*)hashtree, capacity, elemdata, max_el);
+      return nf_fieldset_hashtree_structcheck_31(aTHX_ (uint32_t*)hashtree, capacity, elemdata, max_el);
    return false;
 }
 
 // Look up the search_key in the hashtable, walk the tree of conflicts, and
 // return the element index which matched.
-size_t nf_fieldstorage_map_find(void *hashtree, size_t capacity, nf_fieldstorage_t ** elemdata, nf_fieldset_t * search_key) {
-   size_t n_buckets= NF_HASHTREE_TABLE_BUCKETS(capacity), node;
+size_t nf_fieldstorage_map_hashtree_find(void *hashtree, size_t capacity, nf_fieldstorage_t ** elemdata, nf_fieldset_t * search_key) {
+   size_t n_buckets= NF_HASHTREE_TABLE_BUCKETS(capacity);
    size_t el_hashcode, key_hashcode= ( (size_t)(search_key) );
    int cmp;
-   if (capacity <= 0x7F) {
-      uint8_t *bucket= ((uint8_t *)hashtree) + (1 + capacity + key_hashcode % n_buckets);
+    if (capacity <= 0x7F) {
+      uint8_t node, *bucket= ((uint8_t *)hashtree) + (1 + capacity + key_hashcode % n_buckets);
       if ((node= *bucket)) {
          do {
             el_hashcode= ( (size_t)((elemdata)[(node)-1]->fieldset) );
@@ -730,10 +727,9 @@ size_t nf_fieldstorage_map_find(void *hashtree, size_t capacity, nf_fieldstorage
             node= ((uint8_t *)hashtree)[ node*2 + (cmp < 0)? 0 : 1 ] >> 1;
          } while (node);
       }
-      return node;
    }
-   if (capacity <= 0x7FFF) {
-      uint16_t *bucket= ((uint16_t *)hashtree) + (1 + capacity + key_hashcode % n_buckets);
+   else  if (capacity <= 0x7FFF) {
+      uint16_t node, *bucket= ((uint16_t *)hashtree) + (1 + capacity + key_hashcode % n_buckets);
       if ((node= *bucket)) {
          do {
             el_hashcode= ( (size_t)((elemdata)[(node)-1]->fieldset) );
@@ -743,10 +739,9 @@ size_t nf_fieldstorage_map_find(void *hashtree, size_t capacity, nf_fieldstorage
             node= ((uint16_t *)hashtree)[ node*2 + (cmp < 0)? 0 : 1 ] >> 1;
          } while (node);
       }
-      return node;
    }
-   if (capacity <= 0x7FFFFFFF) {
-      uint32_t *bucket= ((uint32_t *)hashtree) + (1 + capacity + key_hashcode % n_buckets);
+   else  if (capacity <= 0x7FFFFFFF) {
+      uint32_t node, *bucket= ((uint32_t *)hashtree) + (1 + capacity + key_hashcode % n_buckets);
       if ((node= *bucket)) {
          do {
             el_hashcode= ( (size_t)((elemdata)[(node)-1]->fieldset) );
@@ -756,17 +751,16 @@ size_t nf_fieldstorage_map_find(void *hashtree, size_t capacity, nf_fieldstorage
             node= ((uint32_t *)hashtree)[ node*2 + (cmp < 0)? 0 : 1 ] >> 1;
          } while (node);
       }
-      return node;
    }
    return 0;
 }
 
-bool nf_fieldstorage_map_reindex(void *hashtree, size_t capacity, nf_fieldstorage_t ** elemdata, size_t el_i, size_t last_i) {
-   size_t n_buckets= NF_HASHTREE_TABLE_BUCKETS(capacity), node;
+bool nf_fieldstorage_map_hashtree_reindex(void *hashtree, size_t capacity, nf_fieldstorage_t ** elemdata, size_t el_i, size_t last_i) {
+   size_t n_buckets= NF_HASHTREE_TABLE_BUCKETS(capacity);
    size_t el_hashcode, new_hashcode, pos;
    IV cmp;
    if (capacity <= 0x7F) {
-      uint8_t *bucket, *parent_ptr, parents[1+16];
+      uint8_t *bucket, node, tree_ref, parents[1+16];
       for (; el_i <= last_i; el_i++) {
          new_hashcode= ( (size_t)((elemdata)[(el_i)-1]->fieldset) );
          bucket= ((uint8_t *)hashtree) + (1 + capacity + new_hashcode % n_buckets);
@@ -774,7 +768,6 @@ bool nf_fieldstorage_map_reindex(void *hashtree, size_t capacity, nf_fieldstorag
             *bucket= el_i;
          else {
             // red/black insert
-            parents[0]= 0; // mark end of list
             pos= 0;
             assert(node < el_i);
             do {
@@ -782,20 +775,21 @@ bool nf_fieldstorage_map_reindex(void *hashtree, size_t capacity, nf_fieldstorag
                el_hashcode= ( (size_t)((elemdata)[(node)-1]->fieldset) );
                cmp= new_hashcode == el_hashcode? (( ((elemdata)[(el_i)-1]->fieldset) < ((elemdata)[(node)-1]->fieldset)? -1 : ((elemdata)[(el_i)-1]->fieldset) == ((elemdata)[(node)-1]->fieldset)? 0 : 1 ))
                   : new_hashcode < el_hashcode? -1 : 1;
-               parent_ptr= &((uint8_t *)hashtree)[ node*2 + (cmp < 0)? 0 : 1 ];
-               node= *parent_ptr >> 1;
+               tree_ref= node*2 + (cmp < 0)? 0 : 1;
+               node= ((uint8_t *)hashtree)[tree_ref] >> 1;
             } while (node && pos < 16);
             if (pos > 16) {
                assert(pos <= 16);
                return false; // fatal error, should never happen unless datastruct corrupt
             }
             // Set left or right pointer of node to new node
-            *parent_ptr |= el_i << 1;
+            ((uint8_t *)hashtree)[tree_ref] |= el_i << 1;
             // Set color of new node to red. other fields should be initialized to zero already
             // Note that this is never the root of the tree because that happens automatically
             // above when *bucket= el_i and node[el_i] is assumed to be zeroed (black) already.
             ((uint8_t *)hashtree)[ el_i*2 ]= 1;
             if (pos > 1) { // no need to balance unless more than 1 parent
+               parents[0]= 0; // mark end of list
                nf_hashtree_rb_balance_7((uint8_t *)hashtree, parents+pos);
                *bucket= parents[1]; // may have changed after tree balance
                // tree root is always black
@@ -806,7 +800,7 @@ bool nf_fieldstorage_map_reindex(void *hashtree, size_t capacity, nf_fieldstorag
       return true;
    }
    if (capacity <= 0x7FFF) {
-      uint16_t *bucket, *parent_ptr, parents[1+32];
+      uint16_t *bucket, node, tree_ref, parents[1+32];
       for (; el_i <= last_i; el_i++) {
          new_hashcode= ( (size_t)((elemdata)[(el_i)-1]->fieldset) );
          bucket= ((uint16_t *)hashtree) + (1 + capacity + new_hashcode % n_buckets);
@@ -814,7 +808,6 @@ bool nf_fieldstorage_map_reindex(void *hashtree, size_t capacity, nf_fieldstorag
             *bucket= el_i;
          else {
             // red/black insert
-            parents[0]= 0; // mark end of list
             pos= 0;
             assert(node < el_i);
             do {
@@ -822,20 +815,21 @@ bool nf_fieldstorage_map_reindex(void *hashtree, size_t capacity, nf_fieldstorag
                el_hashcode= ( (size_t)((elemdata)[(node)-1]->fieldset) );
                cmp= new_hashcode == el_hashcode? (( ((elemdata)[(el_i)-1]->fieldset) < ((elemdata)[(node)-1]->fieldset)? -1 : ((elemdata)[(el_i)-1]->fieldset) == ((elemdata)[(node)-1]->fieldset)? 0 : 1 ))
                   : new_hashcode < el_hashcode? -1 : 1;
-               parent_ptr= &((uint16_t *)hashtree)[ node*2 + (cmp < 0)? 0 : 1 ];
-               node= *parent_ptr >> 1;
+               tree_ref= node*2 + (cmp < 0)? 0 : 1;
+               node= ((uint16_t *)hashtree)[tree_ref] >> 1;
             } while (node && pos < 32);
             if (pos > 32) {
                assert(pos <= 32);
                return false; // fatal error, should never happen unless datastruct corrupt
             }
             // Set left or right pointer of node to new node
-            *parent_ptr |= el_i << 1;
+            ((uint16_t *)hashtree)[tree_ref] |= el_i << 1;
             // Set color of new node to red. other fields should be initialized to zero already
             // Note that this is never the root of the tree because that happens automatically
             // above when *bucket= el_i and node[el_i] is assumed to be zeroed (black) already.
             ((uint16_t *)hashtree)[ el_i*2 ]= 1;
             if (pos > 1) { // no need to balance unless more than 1 parent
+               parents[0]= 0; // mark end of list
                nf_hashtree_rb_balance_15((uint16_t *)hashtree, parents+pos);
                *bucket= parents[1]; // may have changed after tree balance
                // tree root is always black
@@ -846,7 +840,7 @@ bool nf_fieldstorage_map_reindex(void *hashtree, size_t capacity, nf_fieldstorag
       return true;
    }
    if (capacity <= 0x7FFFFFFF) {
-      uint32_t *bucket, *parent_ptr, parents[1+64];
+      uint32_t *bucket, node, tree_ref, parents[1+64];
       for (; el_i <= last_i; el_i++) {
          new_hashcode= ( (size_t)((elemdata)[(el_i)-1]->fieldset) );
          bucket= ((uint32_t *)hashtree) + (1 + capacity + new_hashcode % n_buckets);
@@ -854,7 +848,6 @@ bool nf_fieldstorage_map_reindex(void *hashtree, size_t capacity, nf_fieldstorag
             *bucket= el_i;
          else {
             // red/black insert
-            parents[0]= 0; // mark end of list
             pos= 0;
             assert(node < el_i);
             do {
@@ -862,20 +855,21 @@ bool nf_fieldstorage_map_reindex(void *hashtree, size_t capacity, nf_fieldstorag
                el_hashcode= ( (size_t)((elemdata)[(node)-1]->fieldset) );
                cmp= new_hashcode == el_hashcode? (( ((elemdata)[(el_i)-1]->fieldset) < ((elemdata)[(node)-1]->fieldset)? -1 : ((elemdata)[(el_i)-1]->fieldset) == ((elemdata)[(node)-1]->fieldset)? 0 : 1 ))
                   : new_hashcode < el_hashcode? -1 : 1;
-               parent_ptr= &((uint32_t *)hashtree)[ node*2 + (cmp < 0)? 0 : 1 ];
-               node= *parent_ptr >> 1;
+               tree_ref= node*2 + (cmp < 0)? 0 : 1;
+               node= ((uint32_t *)hashtree)[tree_ref] >> 1;
             } while (node && pos < 64);
             if (pos > 64) {
                assert(pos <= 64);
                return false; // fatal error, should never happen unless datastruct corrupt
             }
             // Set left or right pointer of node to new node
-            *parent_ptr |= el_i << 1;
+            ((uint32_t *)hashtree)[tree_ref] |= el_i << 1;
             // Set color of new node to red. other fields should be initialized to zero already
             // Note that this is never the root of the tree because that happens automatically
             // above when *bucket= el_i and node[el_i] is assumed to be zeroed (black) already.
             ((uint32_t *)hashtree)[ el_i*2 ]= 1;
             if (pos > 1) { // no need to balance unless more than 1 parent
+               parents[0]= 0; // mark end of list
                nf_hashtree_rb_balance_31((uint32_t *)hashtree, parents+pos);
                *bucket= parents[1]; // may have changed after tree balance
                // tree root is always black
@@ -890,7 +884,7 @@ bool nf_fieldstorage_map_reindex(void *hashtree, size_t capacity, nf_fieldstorag
 
 // Verify that every filled bucket refers to a valid tree,
 // and that every node can be found.
-static bool nf_fieldstorage_map_structcheck_7(pTHX_ uint8_t *hashtree, size_t capacity, nf_fieldstorage_t ** elemdata, size_t max_el) {
+static bool nf_fieldstorage_map_hashtree_structcheck_7(pTHX_ uint8_t *hashtree, size_t capacity, nf_fieldstorage_t ** elemdata, size_t max_el) {
    size_t n_buckets= NF_HASHTREE_TABLE_BUCKETS(capacity), node;
    size_t el_hashcode, i_hashcode;
    int cmp, i, depth, blackcount;
@@ -955,7 +949,7 @@ static bool nf_fieldstorage_map_structcheck_7(pTHX_ uint8_t *hashtree, size_t ca
 
 // Verify that every filled bucket refers to a valid tree,
 // and that every node can be found.
-static bool nf_fieldstorage_map_structcheck_15(pTHX_ uint16_t *hashtree, size_t capacity, nf_fieldstorage_t ** elemdata, size_t max_el) {
+static bool nf_fieldstorage_map_hashtree_structcheck_15(pTHX_ uint16_t *hashtree, size_t capacity, nf_fieldstorage_t ** elemdata, size_t max_el) {
    size_t n_buckets= NF_HASHTREE_TABLE_BUCKETS(capacity), node;
    size_t el_hashcode, i_hashcode;
    int cmp, i, depth, blackcount;
@@ -1020,7 +1014,7 @@ static bool nf_fieldstorage_map_structcheck_15(pTHX_ uint16_t *hashtree, size_t 
 
 // Verify that every filled bucket refers to a valid tree,
 // and that every node can be found.
-static bool nf_fieldstorage_map_structcheck_31(pTHX_ uint32_t *hashtree, size_t capacity, nf_fieldstorage_t ** elemdata, size_t max_el) {
+static bool nf_fieldstorage_map_hashtree_structcheck_31(pTHX_ uint32_t *hashtree, size_t capacity, nf_fieldstorage_t ** elemdata, size_t max_el) {
    size_t n_buckets= NF_HASHTREE_TABLE_BUCKETS(capacity), node;
    size_t el_hashcode, i_hashcode;
    int cmp, i, depth, blackcount;
@@ -1085,13 +1079,13 @@ static bool nf_fieldstorage_map_structcheck_31(pTHX_ uint32_t *hashtree, size_t 
 
 // Verify that every filled bucket refers to a valid tree,
 // and that every element can be found.
-bool nf_fieldstorage_map_structcheck(pTHX_ void* hashtree, size_t capacity, nf_fieldstorage_t ** elemdata, size_t max_el) {
+bool nf_fieldstorage_map_hashtree_structcheck(pTHX_ void* hashtree, size_t capacity, nf_fieldstorage_t ** elemdata, size_t max_el) {
    if (capacity < 0x7F)
-      return nf_fieldstorage_map_structcheck_7(aTHX_ (uint8_t*)hashtree, capacity, elemdata, max_el);
+      return nf_fieldstorage_map_hashtree_structcheck_7(aTHX_ (uint8_t*)hashtree, capacity, elemdata, max_el);
    if (capacity < 0x7FFF)
-      return nf_fieldstorage_map_structcheck_15(aTHX_ (uint16_t*)hashtree, capacity, elemdata, max_el);
+      return nf_fieldstorage_map_hashtree_structcheck_15(aTHX_ (uint16_t*)hashtree, capacity, elemdata, max_el);
    if (capacity < 0x7FFFFFFF)
-      return nf_fieldstorage_map_structcheck_31(aTHX_ (uint32_t*)hashtree, capacity, elemdata, max_el);
+      return nf_fieldstorage_map_hashtree_structcheck_31(aTHX_ (uint32_t*)hashtree, capacity, elemdata, max_el);
    return false;
 }
 

@@ -231,7 +231,7 @@ sub find_fn($self) {
          // Look up the search_key in the hashtable, walk the tree of conflicts, and
          // return the element index which matched.
          size_t $name(void *hashtree, size_t capacity, $elemdata_t elemdata, $key_t search_key) {
-            size_t n_buckets= @{[ $self->macro_table_buckets('capacity') ]}, node;
+            size_t n_buckets= @{[ $self->macro_table_buckets('capacity') ]};
             size_t el_hashcode, key_hashcode= @{[ $self->macro_key_hashcode('search_key') ]};
             int cmp;
          C
@@ -239,8 +239,8 @@ sub find_fn($self) {
          my $word_t= $self->word_types->[$_];
          my $word_max= $self->word_max_capacity->[$_];
          $code .= <<~C
-            if (capacity <= @{[ sprintf("0x%X", $word_max) ]}) {
-               $word_t *bucket= (($word_t *)hashtree) + (1 + capacity + key_hashcode % n_buckets);
+            @{[ $_? 'else ':'' ]} if (capacity <= @{[ sprintf("0x%X", $word_max) ]}) {
+               $word_t node, *bucket= (($word_t *)hashtree) + (1 + capacity + key_hashcode % n_buckets);
                if ((node= *bucket)) {
                   do {
                      el_hashcode= @{[ $self->macro_elem_hashcode('elemdata', 'node') ]};
@@ -250,7 +250,6 @@ sub find_fn($self) {
                      node= (($word_t *)hashtree)[ node*2 + (cmp < 0)? 0 : 1 ] >> 1;
                   } while (node);
                }
-               return node;
             }
          C
       }
@@ -270,7 +269,7 @@ sub reindex_fn($self) {
          C
       my $code= <<~C;
          bool $name(void *hashtree, size_t capacity, $elemdata_t elemdata, size_t el_i, size_t last_i) {
-            size_t n_buckets= @{[ $self->macro_table_buckets('capacity') ]}, node;
+            size_t n_buckets= @{[ $self->macro_table_buckets('capacity') ]};
             size_t el_hashcode, new_hashcode, pos;
             IV cmp;
          C
@@ -281,7 +280,7 @@ sub reindex_fn($self) {
          my $balance_fn= $self->balance_fn($_);
          $code .= <<~C
             if (capacity <= @{[ sprintf("0x%X", $word_max) ]}) {
-               $word_t *bucket, *parent_ptr, parents[1+$max_tree_height];
+               $word_t *bucket, node, tree_ref, parents[1+$max_tree_height];
                for (; el_i <= last_i; el_i++) {
                   new_hashcode= @{[ $self->macro_elem_hashcode('elemdata', 'el_i') ]};
                   bucket= (($word_t *)hashtree) + (1 + capacity + new_hashcode % n_buckets);
@@ -289,7 +288,6 @@ sub reindex_fn($self) {
                      *bucket= el_i;
                   else {
                      // red/black insert
-                     parents[0]= 0; // mark end of list
                      pos= 0;
                      assert(node < el_i);
                      do {
@@ -297,20 +295,21 @@ sub reindex_fn($self) {
                         el_hashcode= @{[ $self->macro_elem_hashcode('elemdata', 'node') ]};
                         cmp= new_hashcode == el_hashcode? (@{[ $self->macro_cmp_elem_elem('elemdata', 'el_i', 'node') ]})
                            : new_hashcode < el_hashcode? -1 : 1;
-                        parent_ptr= &(($word_t *)hashtree)[ node*2 + (cmp < 0)? 0 : 1 ];
-                        node= *parent_ptr >> 1;
+                        tree_ref= node*2 + (cmp < 0)? 0 : 1;
+                        node= (($word_t *)hashtree)[tree_ref] >> 1;
                      } while (node && pos < $max_tree_height);
                      if (pos > $max_tree_height) {
                         assert(pos <= $max_tree_height);
                         return false; // fatal error, should never happen unless datastruct corrupt
                      }
                      // Set left or right pointer of node to new node
-                     *parent_ptr |= el_i << 1;
+                     (($word_t *)hashtree)[tree_ref] |= el_i << 1;
                      // Set color of new node to red. other fields should be initialized to zero already
                      // Note that this is never the root of the tree because that happens automatically
                      // above when *bucket= el_i and node[el_i] is assumed to be zeroed (black) already.
                      (($word_t *)hashtree)[ el_i*2 ]= 1;
                      if (pos > 1) { // no need to balance unless more than 1 parent
+                        parents[0]= 0; // mark end of list
                         $balance_fn(($word_t *)hashtree, parents+pos);
                         *bucket= parents[1]; // may have changed after tree balance
                         // tree root is always black

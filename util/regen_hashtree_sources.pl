@@ -11,7 +11,7 @@ my $htgen= HashTree->new(
 $htgen->macro_hashtree_size('capacity');
 for (
    $htgen->override(
-      namespace     => 'nf_fieldset',
+      namespace     => 'nf_fieldset_hashtree',
       elemdata_type => 'nf_fieldinfo_t **',
       key_type      => 'nf_fieldinfo_key_t *',
       macro_elem_hashcode => sub($self, $eldata, $el) {
@@ -28,7 +28,7 @@ for (
       }
    ),
    $htgen->override(
-      namespace     => 'nf_fieldstorage_map',
+      namespace     => 'nf_fieldstorage_map_hashtree',
       elemdata_type => 'nf_fieldstorage_t **',
       key_type      => 'nf_fieldset_t *',
       macro_elem_hashcode => sub($self, $eldata, $el) {

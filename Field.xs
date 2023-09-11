@@ -3,6 +3,8 @@
 #include "XSUB.h"
 #include "ppport.h"
 
+#include "perl_util.c"
+
 /* nf_fieldinfo describes one field of one class.
  * nf_fieldset is the collection of fields for one class.
  * nf_fieldstorage is the struct magically attached to any sub that uses fields
@@ -381,29 +383,6 @@ nf_fieldstorage_t* nf_fieldstorage_map_get(pTHX_ nf_fieldstorage_map_t **self_p,
 /**********************************************************************************************\
 * fieldstorage_t implementation
 \**********************************************************************************************/
-
-// Make one array hold all the same elements of another, respecing magic.
-// Seems like there ought to be something in perlapi to do this?
-void nf_av_copy(pTHX_ AV *dest, SV *src) {
-   size_t i;
-   SV *el, **el_p, *s;
-   AV *src_av= (SvTYPE(src) == SVt_PVAV)? (AV*)src
-      : SvROK(src) && SvTYPE(SvRV(src)) == SVt_PVAV? (AV*)SvRV(src)
-      : NULL;
-   if (!src_av)
-      croak("Expected array or arrayref");
-   av_fill(dest, av_len(src_av));
-   for (i= 0; i <= av_len(src_av); i++) {
-      el= *av_fetch(dest, i, 1);
-      el_p= av_fetch(src_av, i, 0);
-      sv_setsv(el, el_p && *el_p? *el_p : &PL_sv_undef);
-   }
-}
-AV* nf_newAVav(pTHX_ AV *src) {
-   AV *dest= newAV();
-   nf_av_copy(aTHX_ dest, (SV*)src);
-   return dest;
-}
 
 nf_fieldstorage_t * nf_fieldstorage_alloc(pTHX_ nf_fieldset_t *fset) {
    int i;

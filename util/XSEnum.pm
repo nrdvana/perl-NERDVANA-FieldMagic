@@ -118,32 +118,57 @@ sub parse_fn($self) {
    });
 }
 
-sub get_sv_fn($self) {
-   my $name= $self->namespace . '_get_sv';
+sub name_fn($self) {
+   my $name= $self->namespace . '_name';
    $self->generate_once($self->private_impl, $name, sub {
       my $int_t= $self->enum_int_type;
       my $enum_options= $self->enum_options;
       my $c_prefix= $self->enum_c_prefix;
       my $pl_prefix= $self->enum_pl_prefix;
       push $self->public_decl->@* , <<~C;
-         SV* $name(pTHX_ $int_t val);
+         const char* $name(pTHX_ $int_t val);
          C
       my $code= <<~C;
-         SV* $name(pTHX_ $int_t val) {
-            const char *pv= NULL;
+         const char* $name(pTHX_ $int_t val) {
             switch (val) {
          C
       $code .= <<~C for @$enum_options;
-            case $c_prefix$_: pv= "$pl_prefix$_"; break;
+            case $c_prefix$_: return "$pl_prefix$_";
          C
       $code .= <<~C
             default:
-               return sv_2mortal(newSViv(val));
+               return NULL;
             }
-            return sv_2mortal(nf_newSVivpv(val, pv));
          }
          C
    });
+}
+
+sub wrap_fn($self) {
+   my $name= $self->namespace . '_wrap';
+   $self->generate_once($self->private_impl, $name, sub {
+      my $int_t= $self->enum_int_type;
+      my $name_fn= $self->name_fn;
+      push $self->public_decl->@* , <<~C;
+         SV* $name(pTHX_ $int_t val);
+         C
+      <<~C;
+         SV* $name(pTHX_ $int_t val) {
+            const char *pv= $name_fn(val);
+            return pv? nf_newSVivpv(val, pv) : newSViv(val);
+         }
+         C
+   });
+}
+
+sub generate_boot_consts($self) {
+   my $c_prefix= $self->enum_c_prefix;
+   my $pl_prefix= $self->enum_pl_prefix;
+   for ($self->enum_options->@*) {
+      $self->generate_once($self->xs_boot, $pl_prefix.$_, sub { <<~C });
+         newCONSTSUB(stash, "$pl_prefix$_", nf_newSVivpv($c_prefix$_, "$pl_prefix$_"));
+      C
+   }
 }
 
 1;

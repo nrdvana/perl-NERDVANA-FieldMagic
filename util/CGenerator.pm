@@ -17,6 +17,7 @@ sub public_impl  { $_[0]{out}{public_impl} //= [] }
 sub private_decl { $_[0]{out}{private_decl} //= [] }
 sub private_type { $_[0]{out}{private_type} //= [] }
 sub private_impl { $_[0]{out}{private_impl} //= [] }
+sub xs_boot      { $_[0]{out}{xs_boot} //= [] }
 
 sub generate_once($self, $list, $name, $source) {
    if (!$self->{out}{defined}{$name}++) {
@@ -38,13 +39,19 @@ sub prefix_with_ns($self, $value) {
 sub patch_header($self, $fname, $patch_markers=undef) {
    $patch_markers //= "GENERATED ".uc($self->namespace)." HEADERS";
    $self->_patch_file($fname, $patch_markers,
-      join "\n", $self->public_decl->@*, $self->public_type->@*, $self->public_impl->@*);
+      join '', map { chomp; "$_\n" } $self->public_decl->@*, $self->public_type->@*, $self->public_impl->@*);
 }
 
 sub patch_source($self, $fname, $patch_markers=undef) {
    $patch_markers //= "GENERATED ".uc($self->namespace)." IMPLEMENTATION";
    $self->_patch_file($fname, $patch_markers,
-      join "\n", $self->private_decl->@*, $self->private_type->@*, $self->private_impl->@*);
+      join '', map { chomp; "$_\n" } $self->private_decl->@*, $self->private_type->@*, $self->private_impl->@*);
+}
+
+sub patch_xs_boot($self, $fname, $patch_markers=undef) {
+   $patch_markers //= "GENERATED ".uc($self->namespace)." XS BOOT";
+   $self->_patch_file($fname, $patch_markers,
+      join '', map { chomp; "$_\n" } $self->xs_boot->@*);
 }
 
 sub _slurp_file($self, $fname) {
@@ -57,8 +64,8 @@ sub _slurp_file($self, $fname) {
 sub _patch_file($self, $fname, $patch_markers, $new_content) {
    open my $fh, '+<', $fname or die "open($fname): $!";
    my $content= do { local $/= undef; <$fh> };
-   $content =~ s{(BEGIN \Q$patch_markers\E[^\n]*\n).*?(\n[^\n]+?END \Q$patch_markers\E)}
-      {$1$new_content$2}s
+   $content =~ s{(BEGIN \Q$patch_markers\E[^\n]*\n).*?(^[^\n]+?END \Q$patch_markers\E)}
+      {$1$new_content$2}sm
       or croak "Can't find $patch_markers in $fname";
    $fh->seek(0,0) or die "seek: $!";
    $fh->print($content) or die "write: $!";

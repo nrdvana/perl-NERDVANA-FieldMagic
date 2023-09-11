@@ -11,6 +11,8 @@ my $cgen= XSEnum->new(
    enum_pl_prefix => 'FIELD_TYPE_',
 );
 $cgen->parse_fn;
-$cgen->get_sv_fn;
+$cgen->wrap_fn;
+$cgen->generate_boot_consts;
 $cgen->patch_header("$FindBin::RealBin/../Field.xs", "GENERATED ENUM HEADERS");
 $cgen->patch_source("$FindBin::RealBin/../Field.xs", "GENERATED ENUM IMPLEMENTATION");
+$cgen->patch_xs_boot("$FindBin::RealBin/../Field.xs", "GENERATED ENUM CONSTANTS");

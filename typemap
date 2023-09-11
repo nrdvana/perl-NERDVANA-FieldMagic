@@ -1,16 +1,30 @@
 TYPEMAP
 nf_fieldset_t*             O_NerdvanaFieldSet
-nf_field_type_t            O_NrdvanaFieldType
+nf_field_type_t            O_NerdvanaFieldType
+nf_fieldinfo_t*            O_NerdvanaFieldInfo
 
 INPUT
 O_NerdvanaFieldSet
    $var= nf_fieldset_magic_get(aTHX_ $arg, OR_DIE);
 
+OUTPUT
+O_NerdvanaFieldSet
+   $arg= newRV_inc((SV*) ($var)->wrapper);
+
 INPUT
 O_NerdvanaFieldType
-   if (!nf_field_type_parse(aTHX_ $arg, &($var))
-       croak("Invalid field type %s", SvPV_nolen($arg));
+   if (!nf_field_type_parse(aTHX_ $arg, &($var)))
+       croak(\"Invalid field type %s\", SvPV_nolen($arg));
 
 OUTPUT
 O_NerdvanaFieldType
-  $arg= nf_field_type_get_sv(aTHX_ $var);
+  $arg= nf_field_type_wrap(aTHX_ $var);
+
+INPUT
+O_NerdvanaFieldInfo
+  $var= nf_fieldinfo_magic_get(aTHX_ $arg, OR_DIE);
+
+OUTPUT
+O_NerdvanaFieldInfo
+  $arg= nf_fieldinfo_wrap(aTHX_ $var);
+

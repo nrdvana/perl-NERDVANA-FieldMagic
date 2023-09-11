@@ -15,6 +15,7 @@ struct nf_fieldinfo;         typedef struct nf_fieldinfo nf_fieldinfo_t;
 struct nf_fieldinfo_key;     typedef struct nf_fieldinfo_key nf_fieldinfo_key_t;
 struct nf_fieldstorage_map;  typedef struct nf_fieldstorage_map nf_fieldstorage_map_t;
 struct nf_fieldstorage;      typedef struct nf_fieldstorage nf_fieldstorage_t;
+typedef int nf_field_type_t;
 
 struct nf_fieldset {
    /* wrapper is the HV FieldSet object whose reference count controls the
@@ -35,6 +36,7 @@ struct nf_fieldinfo_key {
 };
 struct nf_fieldinfo {
    nf_fieldset_t *fieldset;
+   size_t field_idx;
    SV *name;
    unsigned name_hashcode;
    int flags;
@@ -62,7 +64,8 @@ struct nf_fieldinfo {
       AV *av;
       HV *hv;
    } def_val;
-   size_t storage_ofs;
+   HV *meta_class;
+   size_t storage_ofs, storage_size;
 };
 
 #define NF_FIELDSET_AUTOCREATE 0x10000
@@ -76,10 +79,9 @@ nf_fieldinfo_t * nf_fieldset_get_field(pTHX_ nf_fieldset_t *self, SV *name, int 
 
 /* BEGIN GENERATED ENUM HEADERS */
 bool nf_field_type_parse(pTHX_ SV *sv, int *dest);
-
-SV* nf_field_type_get_sv(pTHX_ int val);
-
-/* END GENERATED ENUM HEADERS */
+const char* nf_field_type_name(pTHX_ int val);
+SV* nf_field_type_wrap(pTHX_ int val);
+SV* nf_field_type_wrap(pTHX_ int val);/* END GENERATED ENUM HEADERS */
 
 struct nf_fieldstorage_map {
    size_t el_count, capacity;
@@ -115,7 +117,6 @@ void nf_fieldstorage_handle_new_fields(pTHX_ nf_fieldstorage_t **self_p);
 /* BEGIN GENERATED NF_HASHTREE HEADERS */
 // For a given capacity, this is how many hashtable buckets will be allocated
 #define NF_HASHTREE_TABLE_BUCKETS(capacity) ((capacity) + ((capacity) >> 1))
-
 // Size of hashtree structure, not including element array that it is appended to
 // This is a function of the max capacity of elements.
 #define NF_HASHTREE_SIZE(capacity) ( \
@@ -127,19 +128,12 @@ void nf_fieldstorage_handle_new_fields(pTHX_ nf_fieldstorage_t **self_p);
      ((capacity)+1)*2 \
      + NF_HASHTREE_TABLE_BUCKETS(capacity) \
    ))
-
 size_t nf_fieldset_hashtree_find(void *hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, nf_fieldinfo_key_t * search_key);
-
 bool nf_fieldset_hashtree_reindex(void *hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, size_t el_i, size_t last_i);
-
 bool nf_fieldset_hashtree_structcheck(pTHX_ void* hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, size_t max_el);
-
 size_t nf_fieldstorage_map_hashtree_find(void *hashtree, size_t capacity, nf_fieldstorage_t ** elemdata, nf_fieldset_t * search_key);
-
 bool nf_fieldstorage_map_hashtree_reindex(void *hashtree, size_t capacity, nf_fieldstorage_t ** elemdata, size_t el_i, size_t last_i);
-
 bool nf_fieldstorage_map_hashtree_structcheck(pTHX_ void* hashtree, size_t capacity, nf_fieldstorage_t ** elemdata, size_t max_el);
-
 /* END GENERATED NF_HASHTREE HEADERS */
 
 #include "hashtree.c"
@@ -147,13 +141,6 @@ bool nf_fieldstorage_map_hashtree_structcheck(pTHX_ void* hashtree, size_t capac
 /**********************************************************************************************\
 * fieldset_t implementation
 \**********************************************************************************************/
-
-nf_fieldset_t * nf_fieldset_alloc(pTHX_) {
-   nf_fieldset_t *self;
-   SV *tmp;
-   Newxz(self, 1, nf_fieldset_t);
-   return self;
-}
 
 /* Magic for binding nf_fieldset_t to a FieldSet object */
 
@@ -182,23 +169,24 @@ static MGVTBL nf_fieldset_magic_vt= {
 #endif
 };
 
-SV * nf_fieldset_get_wrapper(pTHX_ nf_fieldset_t *self) {
+nf_fieldset_t * nf_fieldset_alloc(pTHX_) {
+   nf_fieldset_t *self;
    MAGIC *magic;
    SV *ref;
-   if (!self->wrapper) {
-      self->wrapper= newHV();
-      magic= sv_magicext((SV*)self->wrapper, NULL, PERL_MAGIC_ext, &nf_fieldset_magic_vt, (char*) self, 0);
-      #ifdef USE_ITHREADS
-      magic->mg_flags |= MGf_DUP;
-      #else
-      (void)magic; // suppress warning
-      #endif
-      ref= sv_2mortal(newRV_noinc((SV*)self->wrapper));
-      sv_bless(ref, gv_stashpvn("NERDVANA::Field::FieldSet", 25, GV_ADD));
-   } else {
-      ref= sv_2mortal(newRV_inc((SV*)self->wrapper));
-   }
-   return ref;
+   Newxz(self, 1, nf_fieldset_t);
+   // The wrapper holds the refcount for this fieldset, so must be created.
+   self->wrapper= newHV();
+   magic= sv_magicext((SV*)self->wrapper, NULL, PERL_MAGIC_ext, &nf_fieldset_magic_vt, (char*) self, 0);
+   #ifdef USE_ITHREADS
+   magic->mg_flags |= MGf_DUP;
+   #else
+   (void)magic; // suppress warning
+   #endif
+   // Need a ref in order to call sv_bless
+   // Also, causes this object to be mortal
+   ref= sv_2mortal(newRV_noinc((SV*)self->wrapper));
+   sv_bless(ref, gv_stashpv("NERDVANA::Field::FieldSet", GV_ADD));
+   return self;
 }
 
 /* Magic for binding nf_fieldset_t to a package stash HV.
@@ -247,13 +235,14 @@ void nf_fieldset_link_to_package(pTHX_ nf_fieldset_t *self, HV *pkg_stash) {
    (void)magic; // suppress warning
    #endif
    // The package stash will now hold a strong reference to us.
-   // The wrapper is where we keep the refcount for self, so it needs to exist.
-   if (!self->wrapper)
-      nf_fieldset_get_wrapper(aTHX_ self);
+   // The wrapper is where we keep the refcount for self.
    SvREFCNT_inc(self->wrapper);
    // Now create a weak-ref from self to the package stash
    self->pkg_stash_ref= newRV_inc((SV*)pkg_stash);
    sv_rvweaken(self->pkg_stash_ref);
+   // If the package stash ever gets garbage collected, *and* all objects with a nf_fieldstorage
+   // using this fieldset get garbage collected, the refcount drops to 0 and the fieldset
+   // also gets garbage collected.
 }
 
 void nf_fieldset_extend(pTHX_ nf_fieldset_t *self, UV count) {
@@ -406,34 +395,55 @@ bool nf_field_type_parse(pTHX_ SV *sv, int *dest) {
    }
    return false;
 }
-
-SV* nf_field_type_get_sv(pTHX_ int val) {
-   const char *pv= NULL;
+const char* nf_field_type_name(pTHX_ int val) {
    switch (val) {
-   case NF_FIELD_TYPE_AV: pv= "FIELD_TYPE_AV"; break;
-   case NF_FIELD_TYPE_BOOL: pv= "FIELD_TYPE_BOOL"; break;
-   case NF_FIELD_TYPE_HV: pv= "FIELD_TYPE_HV"; break;
-   case NF_FIELD_TYPE_IV: pv= "FIELD_TYPE_IV"; break;
-   case NF_FIELD_TYPE_NV: pv= "FIELD_TYPE_NV"; break;
-   case NF_FIELD_TYPE_PV: pv= "FIELD_TYPE_PV"; break;
-   case NF_FIELD_TYPE_STRUCT: pv= "FIELD_TYPE_STRUCT"; break;
-   case NF_FIELD_TYPE_SV: pv= "FIELD_TYPE_SV"; break;
-   case NF_FIELD_TYPE_UV: pv= "FIELD_TYPE_UV"; break;
-   case NF_FIELD_TYPE_VIRT_AV: pv= "FIELD_TYPE_VIRT_AV"; break;
-   case NF_FIELD_TYPE_VIRT_HV: pv= "FIELD_TYPE_VIRT_HV"; break;
-   case NF_FIELD_TYPE_VIRT_SV: pv= "FIELD_TYPE_VIRT_SV"; break;
+   case NF_FIELD_TYPE_AV: return "FIELD_TYPE_AV";
+   case NF_FIELD_TYPE_BOOL: return "FIELD_TYPE_BOOL";
+   case NF_FIELD_TYPE_HV: return "FIELD_TYPE_HV";
+   case NF_FIELD_TYPE_IV: return "FIELD_TYPE_IV";
+   case NF_FIELD_TYPE_NV: return "FIELD_TYPE_NV";
+   case NF_FIELD_TYPE_PV: return "FIELD_TYPE_PV";
+   case NF_FIELD_TYPE_STRUCT: return "FIELD_TYPE_STRUCT";
+   case NF_FIELD_TYPE_SV: return "FIELD_TYPE_SV";
+   case NF_FIELD_TYPE_UV: return "FIELD_TYPE_UV";
+   case NF_FIELD_TYPE_VIRT_AV: return "FIELD_TYPE_VIRT_AV";
+   case NF_FIELD_TYPE_VIRT_HV: return "FIELD_TYPE_VIRT_HV";
+   case NF_FIELD_TYPE_VIRT_SV: return "FIELD_TYPE_VIRT_SV";
    default:
-      return sv_2mortal(newSViv(val));
+      return NULL;
    }
-   return sv_2mortal(nf_newSVivpv(val, pv));
 }
-
+SV* nf_field_type_wrap(pTHX_ int val) {
+   const char *pv= nf_field_type_name(val);
+   return pv? nf_newSVivpv(val, pv) : newSViv(val);
+}
 /* END GENERATED ENUM IMPLEMENTATION */
 
-nf_fieldinfo_t * nf_fieldset_add_field(pTHX_ nf_fieldset_t *self, SV *name) {
+   #define NF_FIELD_TYPEMASK      0xFF
+   #define NF_FIELD_TYPEMASK_SV   0x80
+   #define NF_FIELD_TYPE_SV       0x81
+   #define NF_FIELD_TYPE_AV       0x82
+   #define NF_FIELD_TYPE_HV       0x83
+   #define NF_FIELD_TYPEMASK_VIRT 0x40
+   #define NF_FIELD_TYPE_VIRT_SV  0x41
+   #define NF_FIELD_TYPE_VIRT_AV  0x42
+   #define NF_FIELD_TYPE_VIRT_HV  0x43
+   #define NF_FIELD_TYPEMASK_C    0x20
+   #define NF_FIELD_TYPE_BOOL     0x21
+   #define NF_FIELD_TYPE_IV       0x22
+   #define NF_FIELD_TYPE_UV       0x23
+   #define NF_FIELD_TYPE_NV       0x24
+   #define NF_FIELD_TYPE_PV       0x25
+   #define NF_FIELD_TYPE_STRUCT   0x26
+   #define NF_FIELD_INHERITED    0x100
+   #define NF_FIELD_HAS_DEFAULT  0x200
+
+
+nf_fieldinfo_t * nf_fieldset_add_field(pTHX_ nf_fieldset_t *self, SV *name, nf_field_type_t type, size_t align, size_t size) {
    nf_fieldinfo_key_t key= { name, 0 };
    size_t i;
    STRLEN len;
+   nf_fieldinfo_t *f;
    char *name_p= SvPV(name, len);
    PERL_HASH(key.name_hashcode, name_p, len);
    if (nf_fieldset_hashtree_find(self->fields + self->capacity, self->capacity, self->fields, &key))
@@ -441,17 +451,40 @@ nf_fieldinfo_t * nf_fieldset_add_field(pTHX_ nf_fieldset_t *self, SV *name) {
    if (self->field_count >= self->capacity)
       nf_fieldset_extend(aTHX_ self, (self->capacity < 48? self->capacity + 16 : self->capacity + (self->capacity >> 1)));
    // If this is a multiple of 8, allocate a new block of fieldinfo structs.
-   i= self->field_count;
+   i= self->field_count++;
    if (!(i & 7))
       Newxz(self->fields[i], 8, nf_fieldinfo_t);
    else // else find the pointer from previous
       self->fields[i]= self->fields[i-1] + 1;
-   self->field_count++;
-   self->fields[i]->name= name;
+   f= self->fields[i];
+   f->name= name;
    SvREFCNT_inc(name);
-   self->fields[i]->name_hashcode= key.name_hashcode;
+   f->name_hashcode= key.name_hashcode;
+   f->fieldset= self;
+   f->field_idx= i;
+   f->flags= type;
+   if (align == 0) {
+      switch (type) {
+      case NF_FIELD_TYPE_SV: case NF_FIELD_TYPE_AV: case NF_FIELD_TYPE_HV: case NF_FIELD_TYPE_PV:
+         align= size= sizeof(SV*); break;
+      case NF_FIELD_TYPE_BOOL:
+         align= size= sizeof(bool); break;
+      case NF_FIELD_TYPE_IV:
+         align= size= sizeof(IV); break;
+      case NF_FIELD_TYPE_UV:
+         align= size= sizeof(UV); break;
+      case NF_FIELD_TYPE_NV:
+         align= size= sizeof(NV); break;
+      default:
+         croak("Un-handled type: %ld", (long) type);
+      }
+   }
+   if (size && align) {
+      f->storage_ofs= (self->storage_size + align - 1) & ~(size_t)(align-1);
+      self->storage_size= f->storage_ofs + size;
+   }
    nf_fieldset_hashtree_reindex(self->fields + self->capacity, self->capacity, self->fields, i+i, i+i);
-   return NULL;
+   return self->fields[i];
 }
 
 nf_fieldinfo_t * nf_fieldset_get_field(pTHX_ nf_fieldset_t *self, SV *name, int flags) {
@@ -498,7 +531,7 @@ void nf_fieldstorage_map_free(pTHX_ nf_fieldstorage_map_t *self) {
 
 nf_fieldstorage_t* nf_fieldstorage_map_get(pTHX_ nf_fieldstorage_map_t **self_p, nf_fieldset_t *fset, int flags) {
    nf_fieldstorage_map_t *self= *self_p, *newself;
-   size_t i, n, capacity= self? self->capacity : 0;
+   size_t i, capacity= self? self->capacity : 0;
    nf_fieldstorage_t *fstor;
    // If called on a NULL pointer, fieldstorage is not found.
    i= !self? 0
@@ -539,8 +572,6 @@ nf_fieldstorage_t* nf_fieldstorage_map_get(pTHX_ nf_fieldstorage_map_t **self_p,
 \**********************************************************************************************/
 
 nf_fieldstorage_t * nf_fieldstorage_alloc(pTHX_ nf_fieldset_t *fset) {
-   int i;
-   char *dest_p;
    nf_fieldstorage_t *self= (nf_fieldstorage_t *) safecalloc(
       sizeof(nf_fieldstorage_t)
       + fset->storage_size,
@@ -552,7 +583,6 @@ nf_fieldstorage_t * nf_fieldstorage_alloc(pTHX_ nf_fieldset_t *fset) {
 }
 
 void nf_fieldstorage_handle_new_fields(pTHX_ nf_fieldstorage_t **fstor) {
-   nf_fieldstorage_t *tmp;
    nf_fieldset_t *fset= (*fstor)->fieldset;
    size_t n, diff;
    // Currently, nothing needs done aside from making sure this object
@@ -597,7 +627,7 @@ void nf_fieldstorage_free(pTHX_ nf_fieldstorage_t *self) {
    nf_fieldset_t *fset= self->fieldset;
    nf_fieldinfo_t *finfo;
    SV **sv_p;
-   int i, type;
+   int i;
    for (i= fset->field_count-1; i >= 0; i--) {
       finfo= fset->fields[i];
       if ((finfo->flags & NF_FIELD_TYPE_SV) && finfo->storage_ofs < self->storage_size) {
@@ -681,18 +711,6 @@ SV *nf_fieldstorage_field_lvalue(pTHX_ nf_fieldstorage_t *self, nf_fieldinfo_t *
 }
 
 #if 0
-
-// Make one hashtable equal another, respecting magic
-void nf_hv_copy(pTHX_ HV *dest, SV *src) {
-   HV *src_hv= (SvTYPE(src) == SVt_PVHV? (HV*)src
-      : SvROK(src) && SvTYPE(SvRV(src)) == SVt_PVHV? (HV*)SvRV(src)
-      : NULL;
-   if (!src_hv)
-      croak("Expected hash or hashref");
-   hv_clear(dest);
-   
-}
-
 // Assign to the storage of a field.
 void nf_fieldstorage_field_setsv(pTHX_ nf_fieldstorage_t *self, nf_fieldinfo_t *finfo, SV *value) {
    SV **av_array;
@@ -743,18 +761,72 @@ void nf_fieldstorage_field_setsv(pTHX_ nf_fieldstorage_t *self, nf_fieldinfo_t *
  */
 static nf_fieldset_t* nf_fieldset_magic_get(pTHX_ SV *sv, int flags) {
    MAGIC* magic;
-   nf_fieldset_t *fs;
-   if (SvROK(sv) && SvMAGICAL(SvRV(sv))) {
+   if (SvROK(sv))
+      sv= SvRV(sv);
+   if (SvMAGICAL(sv)) {
       /* Iterate magic attached to this scalar, looking for one with our vtable */
-      for (magic= SvMAGIC(SvRV(sv)); magic; magic = magic->mg_moremagic)
+      for (magic= SvMAGIC(sv); magic; magic = magic->mg_moremagic)
          if (magic->mg_type == PERL_MAGIC_ext && (
                magic->mg_virtual == &nf_fieldset_magic_vt
                || magic->mg_virtual == &nf_fieldset_pkg_stash_magic_vt
             ))
-            return (nf_fieldset_t*) &magic->mg_ptr;
+            return (nf_fieldset_t*) magic->mg_ptr;
    }
    if (flags & OR_DIE)
       croak("Not a FieldSet object");
+   return NULL;
+}
+
+// Called when a ::FieldInfo object gets garbage collected.  It has a strong reference
+// to the nf_fieldset_t owner, so that needs released, but the fieldinfo struct
+// does not get deleted.  Many Field objects can refer to the same nf_fieldinfo_t
+static int nf_fieldinfo_magic_free(pTHX_ SV *sv, MAGIC *mg) {
+   nf_fieldinfo_t *finf= (nf_fieldinfo_t*) mg->mg_ptr;
+   if (finf && !PL_dirty)
+      SvREFCNT_dec(finf->fieldset->wrapper);
+   return 0;
+}
+#ifdef USE_ITHREADS
+static int nf_fieldinfo_magic_dup(pTHX_ MAGIC *mg, CLONE_PARAMS *param) {
+   croak("TODO: thread support for NERDVANA::Field");
+   return 0;
+};
+#else
+#define nf_fieldinfo_magic_dup NULL
+#endif
+static MGVTBL nf_fieldinfo_magic_vt= {
+   NULL, NULL, NULL, NULL, nf_fieldinfo_magic_free,
+   NULL, nf_fieldinfo_magic_dup
+#ifdef MGf_LOCAL
+   ,NULL
+#endif
+};
+
+static SV* nf_fieldinfo_wrap(pTHX_ nf_fieldinfo_t *finfo) {
+   if (!finfo)
+      return &PL_sv_undef;
+   SV *sv= newSV(0);
+   MAGIC *magic= sv_magicext(sv, NULL, PERL_MAGIC_ext, &nf_fieldinfo_magic_vt, (char*)finfo, 0);
+   #ifdef USE_ITHREADS
+   magic->mg_flags |= MGf_DUP;
+   #else
+   (void)magic;
+   #endif
+   SvREFCNT_inc(finfo->fieldset->wrapper); // refcnt on fieldset, not fieldinfo
+   return sv_bless(newRV_noinc(sv),
+      gv_stashpv("NERDVANA::Field::FieldInfo", GV_ADD));
+}
+
+static nf_fieldinfo_t* nf_fieldinfo_magic_get(pTHX_ SV *obj, int flags) {
+   MAGIC* magic;
+   if (SvROK(obj) && SvMAGICAL(SvRV(obj))) {
+      /* Iterate magic attached to this scalar, looking for one with our vtable */
+      for (magic= SvMAGIC(SvRV(obj)); magic; magic = magic->mg_moremagic)
+         if (magic->mg_type == PERL_MAGIC_ext && magic->mg_virtual == &nf_fieldinfo_magic_vt)
+            return (nf_fieldinfo_t*) magic->mg_ptr;
+   }
+   if (flags & OR_DIE)
+      croak("Not a FieldInfo object");
    return NULL;
 }
 
@@ -811,15 +883,52 @@ static nf_fieldstorage_t* nf_fieldstorage_magic_get(pTHX_ SV *sv, nf_fieldset_t 
 MODULE = NERDVANA::Field                  PACKAGE = NERDVANA::Field
 
 void
+import(pkg, ...)
+   SV *pkg
+   INIT:
+      const PERL_CONTEXT *cx= caller_cx(0, NULL);
+      int i;
+      const char *pv;
+      STRLEN len;
+      GV **field;
+      HV *src_stash, *dest_stash;
+   PPCODE:
+      pv= SvPV(pkg, len);
+      src_stash= gv_stashpvn(pv, len, GV_ADD);
+      dest_stash= (HV*) CopSTASH(cx->blk_oldcop);
+      if (dest_stash && SvTYPE((SV*)dest_stash) != SVt_PVHV)
+         dest_stash= NULL;
+      if (items == 1) {
+         warn("TODO: enable field syntax in current scope");
+      }
+      else {
+         for (i= 1; i < items; i++) {
+            if (SvROK(ST(i)) && !sv_isobject(ST(i)))
+               croak("Ref types are reserved for future use"); 
+            pv= SvPV(ST(i), len);
+            //if (len > 1 && *pv == '-')
+            // TODO
+            // else {
+            // export the symbol
+            if (!dest_stash)
+               croak("BUG: no destination package for import");
+            field= (GV**) hv_fetch(src_stash, pv, len, 0);
+            if (!field || !*field)
+               croak("%s is not exported by %s", pv, HvENAME(src_stash));
+            if (hv_store(dest_stash, pv, len, (SV*) *field, 0))
+               SvREFCNT_inc(*field);
+         }
+      }
+
+nf_fieldset_t*
 fieldset_for_package(pkg)
    SV *pkg
    INIT:
       HV *pkg_stash;
       UV pkg_str_len;
       const char *pkg_str;
-      nf_fieldset_t *fset;
-   PPCODE:
-      if (SvROK(pkg) && SvTYPE(SvRV(pkg)) == SVt_PVHV && HvENAME((HV*)SvRV(pkg)))
+   CODE:
+      if (SvROK(pkg) && SvTYPE(SvRV(pkg)) == SVt_PVHV && HvENAMELEN((HV*)SvRV(pkg)))
          pkg_stash= (HV*) SvRV(pkg);
       else {
          pkg_str= SvPV(pkg, pkg_str_len);
@@ -827,11 +936,20 @@ fieldset_for_package(pkg)
          if (!pkg_stash)
             croak("No such package '%s'", pkg_str);
       }
-      fset= nf_fieldset_alloc(aTHX_);
-      // create the wrapper first so that there is a refcount to clean it up if next line dies
-      ST(0)= nf_fieldset_get_wrapper(aTHX_ fset);
-      nf_fieldset_link_to_package(aTHX_ fset, pkg_stash);
-      XSRETURN(1);
+      RETVAL= nf_fieldset_magic_get(aTHX_ (SV*) pkg_stash, 0);
+      if (!RETVAL) {
+         RETVAL= nf_fieldset_alloc(aTHX_);
+         nf_fieldset_link_to_package(aTHX_ RETVAL, pkg_stash);
+      }
+   OUTPUT:
+      RETVAL
+
+nf_fieldset_t*
+new_fieldset()
+   CODE:
+      RETVAL= nf_fieldset_alloc(aTHX_);
+   OUTPUT:
+      RETVAL
 
 void
 field_type(sv)
@@ -839,13 +957,13 @@ field_type(sv)
    INIT:
       int type;
    PPCODE:
-      if (!nf_field_type_parse(aTHX_ sv, &type))
-         ST(0)= &PL_sv_undef;
-      else
-         ST(0)= nf_field_type_get_sv(aTHX_ type);
+      ST(0)= nf_field_type_parse(aTHX_ sv, &type)
+         ? sv_2mortal(nf_field_type_wrap(aTHX_ type))
+         : &PL_sv_undef;
       XSRETURN(1);
-      
+
 MODULE = NERDVANA::Field                  PACKAGE = NERDVANA::Field::FieldSet
+PROTOTYPES: DISABLE
 
 void
 new(cls)
@@ -854,7 +972,7 @@ new(cls)
       nf_fieldset_t *self;
    PPCODE:
       self= nf_fieldset_alloc(aTHX_);
-      ST(0)= nf_fieldset_get_wrapper(aTHX_ self);
+      ST(0)= sv_2mortal(newRV_inc((SV*) self->wrapper));
       // Allow it to be blessed as something else
       if (strcmp(cls, "NERDVANA::Field::FieldSet") != 0)
          sv_bless(ST(0), gv_stashpv(cls, GV_ADD));
@@ -867,6 +985,15 @@ field_count(self)
       RETVAL= self->field_count;
    OUTPUT:
       RETVAL
+
+void
+package_name(self)
+   nf_fieldset_t *self
+   INIT:
+      HV *pkg= self->pkg_stash_ref? (HV*) SvRV(self->pkg_stash_ref) : NULL;
+   PPCODE:
+      ST(0)= pkg && HvENAMELEN(pkg)? sv_2mortal(newSVpvn(HvENAME(pkg), HvENAMELEN(pkg))) : &PL_sv_undef;
+      XSRETURN(1);
 
 IV
 _capacity(self)
@@ -888,20 +1015,107 @@ void
 add_field(self, name, type, ...)
    nf_fieldset_t *self
    SV *name
-   SV *type
+   nf_field_type_t type
    INIT:
-      nf_fieldinfo_t *t= 
+      nf_fieldinfo_t *finfo;
+      char *pv;
+      STRLEN len;
+      int i;
+      SV *def_val= NULL;
+      U8 wantarray= GIMME_V;
    PPCODE:
-      
-      nf_fieldset_add_field(self, name);
+      // Process options
+      for (i= 3; i < items; i++) {
+         pv= SvPV(ST(i), len);
+         if (strcmp(pv, "default") == 0) {
+            if (i+1 == items) croak("Missing argument for 'default'");
+            ++i;
+            def_val= ST(i);
+         }
+         else croak("Unknown option '%s'", pv);
+      }
+      switch (type) {
+      case NF_FIELD_TYPE_SV: {
+            finfo= nf_fieldset_add_field(aTHX_ self, name, type, 0, 0);
+            if (def_val) {
+               finfo->flags |= NF_FIELD_HAS_DEFAULT;
+               finfo->def_val.sv= newSVsv(def_val);
+            }
+            break;
+         }
+      default:
+         croak("Unsupported type %d", (int) type);
+      }
+      // Only generate the object if defined wantarray
+      if (wantarray != G_VOID) {
+         ST(0)= sv_2mortal(nf_fieldinfo_wrap(finfo));
+         XSRETURN(1);
+      }
+      else XSRETURN(0);
 
-void
+nf_fieldinfo_t*
 field(fs, name)
    nf_fieldset_t *fs
    SV *name
    INIT:
-      nf_fieldinfo_t *field= nf_fieldset_get_field(fs, name, 0);
-   PPCODE:
-      ST(0)= field? newSVuv((UV)field) : &PL_sv_undef;
-      XSRETURN(1);
+      UV field_idx;
+   CODE:
+      if (looks_like_number(name)) {
+         field_idx= SvUV(name);
+         RETVAL= (field_idx < fs->field_count)? fs->fields[field_idx] : NULL;
+      } else {
+         RETVAL= nf_fieldset_get_field(fs, name, 0);
+      }
+   OUTPUT:
+      RETVAL
 
+MODULE = NERDVANA::Field              PACKAGE = NERDVANA::Field::FieldInfo
+
+nf_fieldset_t*
+fieldset(self)
+   nf_fieldinfo_t *self
+   CODE:
+      RETVAL= self->fieldset;
+   OUTPUT:
+      RETVAL
+
+IV
+field_idx(self)
+   nf_fieldinfo_t *self
+   CODE:
+      RETVAL= self->field_idx;
+   OUTPUT:
+      RETVAL
+
+SV*
+name(self)
+   nf_fieldinfo_t *self
+   CODE:
+      RETVAL= newSVsv(self->name);
+   OUTPUT:
+      RETVAL
+
+nf_field_type_t
+type(self)
+   nf_fieldinfo_t *self
+   CODE:
+      RETVAL= NF_FIELDINFO_TYPE(self);
+   OUTPUT:
+      RETVAL
+
+BOOT:
+   HV* stash= gv_stashpv("NERDVANA::Field", GV_ADD);
+   /* BEGIN GENERATED ENUM CONSTANTS */
+   newCONSTSUB(stash, "FIELD_TYPE_AV", nf_newSVivpv(NF_FIELD_TYPE_AV, "FIELD_TYPE_AV"));
+   newCONSTSUB(stash, "FIELD_TYPE_BOOL", nf_newSVivpv(NF_FIELD_TYPE_BOOL, "FIELD_TYPE_BOOL"));
+   newCONSTSUB(stash, "FIELD_TYPE_HV", nf_newSVivpv(NF_FIELD_TYPE_HV, "FIELD_TYPE_HV"));
+   newCONSTSUB(stash, "FIELD_TYPE_IV", nf_newSVivpv(NF_FIELD_TYPE_IV, "FIELD_TYPE_IV"));
+   newCONSTSUB(stash, "FIELD_TYPE_NV", nf_newSVivpv(NF_FIELD_TYPE_NV, "FIELD_TYPE_NV"));
+   newCONSTSUB(stash, "FIELD_TYPE_PV", nf_newSVivpv(NF_FIELD_TYPE_PV, "FIELD_TYPE_PV"));
+   newCONSTSUB(stash, "FIELD_TYPE_STRUCT", nf_newSVivpv(NF_FIELD_TYPE_STRUCT, "FIELD_TYPE_STRUCT"));
+   newCONSTSUB(stash, "FIELD_TYPE_SV", nf_newSVivpv(NF_FIELD_TYPE_SV, "FIELD_TYPE_SV"));
+   newCONSTSUB(stash, "FIELD_TYPE_UV", nf_newSVivpv(NF_FIELD_TYPE_UV, "FIELD_TYPE_UV"));
+   newCONSTSUB(stash, "FIELD_TYPE_VIRT_AV", nf_newSVivpv(NF_FIELD_TYPE_VIRT_AV, "FIELD_TYPE_VIRT_AV"));
+   newCONSTSUB(stash, "FIELD_TYPE_VIRT_HV", nf_newSVivpv(NF_FIELD_TYPE_VIRT_HV, "FIELD_TYPE_VIRT_HV"));
+   newCONSTSUB(stash, "FIELD_TYPE_VIRT_SV", nf_newSVivpv(NF_FIELD_TYPE_VIRT_SV, "FIELD_TYPE_VIRT_SV"));
+   /* END GENERATED ENUM CONSTANTS */

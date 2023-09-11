@@ -1,7 +1,7 @@
 package NERDVANA::Field;
 
 # VERSION
-# ABSTRACT: 3D Coordinate Space math
+# ABSTRACT: It's Fields All The Way Down
 
 use strict;
 use warnings;
@@ -79,9 +79,9 @@ for that package.
 Takes either a string or a number, and gives you a dualvar SV that tell you both answers.
 If the name or number is not valid, this returns C<undef>.
 
-=head2 anonymous_fieldset
+=head2 new_fieldset
 
-Shortcut for L<NERDVANA::Field/new>.
+Shortcut for L<NERDVANA::Field::FieldSet/new>.
 
 =head2 get_object_fieldsets
 
@@ -89,3 +89,34 @@ Shortcut for L<NERDVANA::Field/new>.
 
 Returns a list of all fieldsets which have active storage associated with the object.
 
+=head1 CONSTANTS
+
+=head2 Field Types
+
+=over
+
+=item FIELD_TYPE_SV
+
+=item FIELD_TYPE_AV
+
+=item FIELD_TYPE_HV
+
+=item FIELD_TYPE_VIRT_SV
+
+=item FIELD_TYPE_VIRT_AV
+
+=item FIELD_TYPE_VIRT_HV
+
+=item FIELD_TYPE_BOOL
+
+=item FIELD_TYPE_IV
+
+=item FIELD_TYPE_UV
+
+=item FIELD_TYPE_NV
+
+=item FIELD_TYPE_PV
+
+=item FIELD_TYPE_STRUCT
+
+=back

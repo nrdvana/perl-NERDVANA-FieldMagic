@@ -1,16 +1,15 @@
 /* BEGIN GENERATED NF_HASHTREE IMPLEMENTATION */
 static void nf_hashtree_rb_balance_7(uint8_t *hashtree, uint8_t *parents);
-
 static void nf_hashtree_rb_balance_15(uint16_t *hashtree, uint16_t *parents);
-
 static void nf_hashtree_rb_balance_31(uint32_t *hashtree, uint32_t *parents);
-
 // Look up the search_key in the hashtable, walk the tree of conflicts, and
 // return the element index which matched.
 size_t nf_fieldset_hashtree_find(void *hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, nf_fieldinfo_key_t * search_key) {
    size_t n_buckets= NF_HASHTREE_TABLE_BUCKETS(capacity);
-   size_t el_hashcode, key_hashcode= ( (search_key)->name_hashcode );
+   size_t el_hashcode, key_hashcode;
    int cmp;
+   if (!n_buckets) return 0;
+   key_hashcode= ( (search_key)->name_hashcode );
     if (capacity <= 0x7F) {
       uint8_t node, *bucket= ((uint8_t *)hashtree) + (1 + capacity + key_hashcode % n_buckets);
       if ((node= *bucket)) {
@@ -49,7 +48,6 @@ size_t nf_fieldset_hashtree_find(void *hashtree, size_t capacity, nf_fieldinfo_t
    }
    return 0;
 }
-
 #define HASHTREE_LEFT(n)        (hashtree[(n)*2] >> 1)
 #define HASHTREE_RIGHT(n)       (hashtree[(n)*2+1] >> 1)
 #define HASHTREE_IS_RED(n)      (hashtree[(n)*2] & 1)
@@ -57,7 +55,6 @@ size_t nf_fieldset_hashtree_find(void *hashtree, size_t capacity, nf_fieldinfo_t
 #define HASHTREE_SET_RIGHT(n,v) (hashtree[(n)*2]= ((v)<<1))
 #define HASHTREE_SET_RED(n)     (hashtree[(n)*2] |= 1)
 #define HASHTREE_SET_BLACK(n)   (hashtree[(n)*2]= hashtree[(n)*2] >> 1 << 1)
-
 // balance a tree from parents[0] upward.  (parents is terminated by a 0 value)
 // nodes is the full array of tree nodes.
 static void nf_hashtree_rb_balance_7(uint8_t *hashtree, uint8_t *parents) {
@@ -142,7 +139,6 @@ static void nf_hashtree_rb_balance_7(uint8_t *hashtree, uint8_t *parents) {
       pos= *parents--;
    }
 }
-
 // balance a tree from parents[0] upward.  (parents is terminated by a 0 value)
 // nodes is the full array of tree nodes.
 static void nf_hashtree_rb_balance_15(uint16_t *hashtree, uint16_t *parents) {
@@ -227,7 +223,6 @@ static void nf_hashtree_rb_balance_15(uint16_t *hashtree, uint16_t *parents) {
       pos= *parents--;
    }
 }
-
 // balance a tree from parents[0] upward.  (parents is terminated by a 0 value)
 // nodes is the full array of tree nodes.
 static void nf_hashtree_rb_balance_31(uint32_t *hashtree, uint32_t *parents) {
@@ -312,11 +307,12 @@ static void nf_hashtree_rb_balance_31(uint32_t *hashtree, uint32_t *parents) {
       pos= *parents--;
    }
 }
-
 bool nf_fieldset_hashtree_reindex(void *hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, size_t el_i, size_t last_i) {
    size_t n_buckets= NF_HASHTREE_TABLE_BUCKETS(capacity);
    size_t el_hashcode, new_hashcode, pos;
    IV cmp;
+   if (el_i < 1 || last_i > capacity || !n_buckets)
+      return false;
    if (capacity <= 0x7F) {
       uint8_t *bucket, node, tree_ref, parents[1+16];
       for (; el_i <= last_i; el_i++) {
@@ -439,7 +435,6 @@ bool nf_fieldset_hashtree_reindex(void *hashtree, size_t capacity, nf_fieldinfo_
    }
    return false; // happens if capacity is out of bounds
 }
-
 // Gets called recursively to verify the Red/Black properties of the subtree at 'idx'
 // Returns the number of black nodes in the current subtree, or -1 if there was an error.
 static int nf_hashtree_treecheck_7(uint8_t *hashtree, size_t max_node, size_t node, int *blackcount_out) {
@@ -460,7 +455,6 @@ static int nf_hashtree_treecheck_7(uint8_t *hashtree, size_t max_node, size_t no
    *blackcount_out= blackcount[0] + (HASHTREE_IS_RED(node) ^ 1);
    return 1 + (depth[0] > depth[1]? depth[0] : depth[1]);
 }
-
 // Verify that every filled bucket refers to a valid tree,
 // and that every node can be found.
 static bool nf_fieldset_hashtree_structcheck_7(pTHX_ uint8_t *hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, size_t max_el) {
@@ -525,7 +519,6 @@ static bool nf_fieldset_hashtree_structcheck_7(pTHX_ uint8_t *hashtree, size_t c
       }
    return success;
 }
-
 // Gets called recursively to verify the Red/Black properties of the subtree at 'idx'
 // Returns the number of black nodes in the current subtree, or -1 if there was an error.
 static int nf_hashtree_treecheck_15(uint16_t *hashtree, size_t max_node, size_t node, int *blackcount_out) {
@@ -546,7 +539,6 @@ static int nf_hashtree_treecheck_15(uint16_t *hashtree, size_t max_node, size_t 
    *blackcount_out= blackcount[0] + (HASHTREE_IS_RED(node) ^ 1);
    return 1 + (depth[0] > depth[1]? depth[0] : depth[1]);
 }
-
 // Verify that every filled bucket refers to a valid tree,
 // and that every node can be found.
 static bool nf_fieldset_hashtree_structcheck_15(pTHX_ uint16_t *hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, size_t max_el) {
@@ -611,7 +603,6 @@ static bool nf_fieldset_hashtree_structcheck_15(pTHX_ uint16_t *hashtree, size_t
       }
    return success;
 }
-
 // Gets called recursively to verify the Red/Black properties of the subtree at 'idx'
 // Returns the number of black nodes in the current subtree, or -1 if there was an error.
 static int nf_hashtree_treecheck_31(uint32_t *hashtree, size_t max_node, size_t node, int *blackcount_out) {
@@ -632,7 +623,6 @@ static int nf_hashtree_treecheck_31(uint32_t *hashtree, size_t max_node, size_t 
    *blackcount_out= blackcount[0] + (HASHTREE_IS_RED(node) ^ 1);
    return 1 + (depth[0] > depth[1]? depth[0] : depth[1]);
 }
-
 // Verify that every filled bucket refers to a valid tree,
 // and that every node can be found.
 static bool nf_fieldset_hashtree_structcheck_31(pTHX_ uint32_t *hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, size_t max_el) {
@@ -697,7 +687,6 @@ static bool nf_fieldset_hashtree_structcheck_31(pTHX_ uint32_t *hashtree, size_t
       }
    return success;
 }
-
 // Verify that every filled bucket refers to a valid tree,
 // and that every element can be found.
 bool nf_fieldset_hashtree_structcheck(pTHX_ void* hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, size_t max_el) {
@@ -709,13 +698,14 @@ bool nf_fieldset_hashtree_structcheck(pTHX_ void* hashtree, size_t capacity, nf_
       return nf_fieldset_hashtree_structcheck_31(aTHX_ (uint32_t*)hashtree, capacity, elemdata, max_el);
    return false;
 }
-
 // Look up the search_key in the hashtable, walk the tree of conflicts, and
 // return the element index which matched.
 size_t nf_fieldstorage_map_hashtree_find(void *hashtree, size_t capacity, nf_fieldstorage_t ** elemdata, nf_fieldset_t * search_key) {
    size_t n_buckets= NF_HASHTREE_TABLE_BUCKETS(capacity);
-   size_t el_hashcode, key_hashcode= ( (size_t)(search_key) );
+   size_t el_hashcode, key_hashcode;
    int cmp;
+   if (!n_buckets) return 0;
+   key_hashcode= ( (size_t)(search_key) );
     if (capacity <= 0x7F) {
       uint8_t node, *bucket= ((uint8_t *)hashtree) + (1 + capacity + key_hashcode % n_buckets);
       if ((node= *bucket)) {
@@ -754,11 +744,12 @@ size_t nf_fieldstorage_map_hashtree_find(void *hashtree, size_t capacity, nf_fie
    }
    return 0;
 }
-
 bool nf_fieldstorage_map_hashtree_reindex(void *hashtree, size_t capacity, nf_fieldstorage_t ** elemdata, size_t el_i, size_t last_i) {
    size_t n_buckets= NF_HASHTREE_TABLE_BUCKETS(capacity);
    size_t el_hashcode, new_hashcode, pos;
    IV cmp;
+   if (el_i < 1 || last_i > capacity || !n_buckets)
+      return false;
    if (capacity <= 0x7F) {
       uint8_t *bucket, node, tree_ref, parents[1+16];
       for (; el_i <= last_i; el_i++) {
@@ -881,7 +872,6 @@ bool nf_fieldstorage_map_hashtree_reindex(void *hashtree, size_t capacity, nf_fi
    }
    return false; // happens if capacity is out of bounds
 }
-
 // Verify that every filled bucket refers to a valid tree,
 // and that every node can be found.
 static bool nf_fieldstorage_map_hashtree_structcheck_7(pTHX_ uint8_t *hashtree, size_t capacity, nf_fieldstorage_t ** elemdata, size_t max_el) {
@@ -946,7 +936,6 @@ static bool nf_fieldstorage_map_hashtree_structcheck_7(pTHX_ uint8_t *hashtree, 
       }
    return success;
 }
-
 // Verify that every filled bucket refers to a valid tree,
 // and that every node can be found.
 static bool nf_fieldstorage_map_hashtree_structcheck_15(pTHX_ uint16_t *hashtree, size_t capacity, nf_fieldstorage_t ** elemdata, size_t max_el) {
@@ -1011,7 +1000,6 @@ static bool nf_fieldstorage_map_hashtree_structcheck_15(pTHX_ uint16_t *hashtree
       }
    return success;
 }
-
 // Verify that every filled bucket refers to a valid tree,
 // and that every node can be found.
 static bool nf_fieldstorage_map_hashtree_structcheck_31(pTHX_ uint32_t *hashtree, size_t capacity, nf_fieldstorage_t ** elemdata, size_t max_el) {
@@ -1076,7 +1064,6 @@ static bool nf_fieldstorage_map_hashtree_structcheck_31(pTHX_ uint32_t *hashtree
       }
    return success;
 }
-
 // Verify that every filled bucket refers to a valid tree,
 // and that every element can be found.
 bool nf_fieldstorage_map_hashtree_structcheck(pTHX_ void* hashtree, size_t capacity, nf_fieldstorage_t ** elemdata, size_t max_el) {
@@ -1088,5 +1075,4 @@ bool nf_fieldstorage_map_hashtree_structcheck(pTHX_ void* hashtree, size_t capac
       return nf_fieldstorage_map_hashtree_structcheck_31(aTHX_ (uint32_t*)hashtree, capacity, elemdata, max_el);
    return false;
 }
-
 /* END GENERATED NF_HASHTREE IMPLEMENTATION */

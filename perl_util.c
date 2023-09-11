@@ -45,7 +45,6 @@ void nf_perlutil_hv_assign(pTHX_ HV *dest, HV *ohv) {
    HE *entry;
    const I32 riter = HvRITER_get(ohv);
    HE * const eiter = HvEITER_get(ohv);
-   STRLEN hv_keys = HvTOTALKEYS(ohv);
 
    hv_clear(dest);
    hv_iterinit(ohv);

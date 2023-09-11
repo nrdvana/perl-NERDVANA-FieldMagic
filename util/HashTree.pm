@@ -232,8 +232,10 @@ sub find_fn($self) {
          // return the element index which matched.
          size_t $name(void *hashtree, size_t capacity, $elemdata_t elemdata, $key_t search_key) {
             size_t n_buckets= @{[ $self->macro_table_buckets('capacity') ]};
-            size_t el_hashcode, key_hashcode= @{[ $self->macro_key_hashcode('search_key') ]};
+            size_t el_hashcode, key_hashcode;
             int cmp;
+            if (!n_buckets) return 0;
+            key_hashcode= @{[ $self->macro_key_hashcode('search_key') ]};
          C
       for (0..$self->max_word_idx) {
          my $word_t= $self->word_types->[$_];
@@ -272,6 +274,8 @@ sub reindex_fn($self) {
             size_t n_buckets= @{[ $self->macro_table_buckets('capacity') ]};
             size_t el_hashcode, new_hashcode, pos;
             IV cmp;
+            if (el_i < 1 || last_i > capacity || !n_buckets)
+               return false;
          C
       for (0..$self->max_word_idx) {
          my $word_t= $self->word_types->[$_];

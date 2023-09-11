@@ -38,13 +38,25 @@ struct nf_fieldinfo {
    SV *name;
    unsigned name_hashcode;
    int flags;
-   #define NF_FIELDINFO_TYPE_MASK    0xFF
-   #define NF_FIELDINFO_TYPE_VIRTUAL    0
-   #define NF_FIELDINFO_TYPE_SV         1
-   #define NF_FIELDINFO_TYPE_AV         3
-   #define NF_FIELDINFO_TYPE_HV         5
-   #define NF_FIELDINFO_INHERITED   0x100
-   #define NF_FIELDINFO_HAS_DEFAULT 0x200
+   #define NF_FIELD_TYPEMASK      0xFF
+   #define NF_FIELD_TYPEMASK_SV   0x80
+   #define NF_FIELD_TYPE_SV       0x81
+   #define NF_FIELD_TYPE_AV       0x82
+   #define NF_FIELD_TYPE_HV       0x83
+   #define NF_FIELD_TYPEMASK_VIRT 0x40
+   #define NF_FIELD_TYPE_VIRT_SV  0x41
+   #define NF_FIELD_TYPE_VIRT_AV  0x42
+   #define NF_FIELD_TYPE_VIRT_HV  0x43
+   #define NF_FIELD_TYPEMASK_C    0x20
+   #define NF_FIELD_TYPE_BOOL     0x21
+   #define NF_FIELD_TYPE_IV       0x22
+   #define NF_FIELD_TYPE_UV       0x23
+   #define NF_FIELD_TYPE_NV       0x24
+   #define NF_FIELD_TYPE_PV       0x25
+   #define NF_FIELD_TYPE_STRUCT   0x26
+   #define NF_FIELD_INHERITED    0x100
+   #define NF_FIELD_HAS_DEFAULT  0x200
+   #define NF_FIELDINFO_TYPE(x) ((x)->flags & NF_FIELD_TYPEMASK)
    union {
       SV *sv;
       AV *av;
@@ -61,6 +73,13 @@ nf_fieldset_t * nf_fieldset_dup(pTHX_ nf_fieldset_t *self);
 void nf_fieldset_free(pTHX_ nf_fieldset_t *self);
 void nf_fieldinfo_destroy(pTHX_ nf_fieldinfo_t *finf);
 nf_fieldinfo_t * nf_fieldset_get_field(pTHX_ nf_fieldset_t *self, SV *name, int flags);
+
+/* BEGIN GENERATED ENUM HEADERS */
+bool nf_field_type_parse(pTHX_ SV *sv, int *dest);
+
+SV* nf_field_type_get_sv(pTHX_ int val);
+
+/* END GENERATED ENUM HEADERS */
 
 struct nf_fieldstorage_map {
    size_t el_count, capacity;
@@ -276,6 +295,140 @@ void nf_fieldinfo_destroy(pTHX_ nf_fieldinfo_t *self) {
    }
 }
 
+/* BEGIN GENERATED ENUM IMPLEMENTATION */
+bool nf_field_type_parse(pTHX_ SV *sv, int *dest) {
+   if (looks_like_number(sv)) {
+      int val= SvIV(sv);
+      if (val != SvIV(sv)) // check whether type narrowing lost some of the value
+         return false;
+      switch (val) {
+      case NF_FIELD_TYPE_AV:
+      case NF_FIELD_TYPE_BOOL:
+      case NF_FIELD_TYPE_HV:
+      case NF_FIELD_TYPE_IV:
+      case NF_FIELD_TYPE_NV:
+      case NF_FIELD_TYPE_PV:
+      case NF_FIELD_TYPE_STRUCT:
+      case NF_FIELD_TYPE_SV:
+      case NF_FIELD_TYPE_UV:
+      case NF_FIELD_TYPE_VIRT_AV:
+      case NF_FIELD_TYPE_VIRT_HV:
+      case NF_FIELD_TYPE_VIRT_SV:
+         *dest= val;
+         return true;
+      default:
+         return false;
+      }
+   } else {
+      STRLEN len;
+      const char *str= SvPV(sv, len);
+      const char *test_str= NULL;
+      int test_val= 0;
+      switch(len) {
+      case 2:
+         if (str[0] < 'N') {
+            if (str[0] < 'H') {
+               test_str= "AV"; test_val= NF_FIELD_TYPE_AV;
+            } else if (str[0] < 'I') {
+               test_str= "HV"; test_val= NF_FIELD_TYPE_HV;
+            } else {
+               test_str= "IV"; test_val= NF_FIELD_TYPE_IV;
+            }
+         } else if (str[0] < 'S') {
+            if (str[0] < 'P') {
+               test_str= "NV"; test_val= NF_FIELD_TYPE_NV;
+            } else {
+               test_str= "PV"; test_val= NF_FIELD_TYPE_PV;
+            }
+         } else if (str[0] < 'U') {
+            test_str= "SV"; test_val= NF_FIELD_TYPE_SV;
+         } else {
+            test_str= "UV"; test_val= NF_FIELD_TYPE_UV;
+         }
+         break;
+      case 4:
+         test_str= "BOOL"; test_val= NF_FIELD_TYPE_BOOL;
+         break;
+      case 6:
+         test_str= "STRUCT"; test_val= NF_FIELD_TYPE_STRUCT;
+         break;
+      case 7:
+         if (str[5] < 'H') {
+            test_str= "VIRT_AV"; test_val= NF_FIELD_TYPE_VIRT_AV;
+         } else if (str[5] < 'S') {
+            test_str= "VIRT_HV"; test_val= NF_FIELD_TYPE_VIRT_HV;
+         } else {
+            test_str= "VIRT_SV"; test_val= NF_FIELD_TYPE_VIRT_SV;
+         }
+         break;
+      case 13:
+         if (str[11] < 'N') {
+            if (str[11] < 'H') {
+               test_str= "FIELD_TYPE_AV"; test_val= NF_FIELD_TYPE_AV;
+            } else if (str[11] < 'I') {
+               test_str= "FIELD_TYPE_HV"; test_val= NF_FIELD_TYPE_HV;
+            } else {
+               test_str= "FIELD_TYPE_IV"; test_val= NF_FIELD_TYPE_IV;
+            }
+         } else if (str[11] < 'S') {
+            if (str[11] < 'P') {
+               test_str= "FIELD_TYPE_NV"; test_val= NF_FIELD_TYPE_NV;
+            } else {
+               test_str= "FIELD_TYPE_PV"; test_val= NF_FIELD_TYPE_PV;
+            }
+         } else if (str[11] < 'U') {
+            test_str= "FIELD_TYPE_SV"; test_val= NF_FIELD_TYPE_SV;
+         } else {
+            test_str= "FIELD_TYPE_UV"; test_val= NF_FIELD_TYPE_UV;
+         }
+         break;
+      case 15:
+         test_str= "FIELD_TYPE_BOOL"; test_val= NF_FIELD_TYPE_BOOL;
+         break;
+      case 17:
+         test_str= "FIELD_TYPE_STRUCT"; test_val= NF_FIELD_TYPE_STRUCT;
+         break;
+      case 18:
+         if (str[16] < 'H') {
+            test_str= "FIELD_TYPE_VIRT_AV"; test_val= NF_FIELD_TYPE_VIRT_AV;
+         } else if (str[16] < 'S') {
+            test_str= "FIELD_TYPE_VIRT_HV"; test_val= NF_FIELD_TYPE_VIRT_HV;
+         } else {
+            test_str= "FIELD_TYPE_VIRT_SV"; test_val= NF_FIELD_TYPE_VIRT_SV;
+         }
+         break;
+      }
+      if (strcmp(str, test_str) == 0) {
+         *dest= test_val;
+         return true;
+      }
+   }
+   return false;
+}
+
+SV* nf_field_type_get_sv(pTHX_ int val) {
+   const char *pv= NULL;
+   switch (val) {
+   case NF_FIELD_TYPE_AV: pv= "FIELD_TYPE_AV"; break;
+   case NF_FIELD_TYPE_BOOL: pv= "FIELD_TYPE_BOOL"; break;
+   case NF_FIELD_TYPE_HV: pv= "FIELD_TYPE_HV"; break;
+   case NF_FIELD_TYPE_IV: pv= "FIELD_TYPE_IV"; break;
+   case NF_FIELD_TYPE_NV: pv= "FIELD_TYPE_NV"; break;
+   case NF_FIELD_TYPE_PV: pv= "FIELD_TYPE_PV"; break;
+   case NF_FIELD_TYPE_STRUCT: pv= "FIELD_TYPE_STRUCT"; break;
+   case NF_FIELD_TYPE_SV: pv= "FIELD_TYPE_SV"; break;
+   case NF_FIELD_TYPE_UV: pv= "FIELD_TYPE_UV"; break;
+   case NF_FIELD_TYPE_VIRT_AV: pv= "FIELD_TYPE_VIRT_AV"; break;
+   case NF_FIELD_TYPE_VIRT_HV: pv= "FIELD_TYPE_VIRT_HV"; break;
+   case NF_FIELD_TYPE_VIRT_SV: pv= "FIELD_TYPE_VIRT_SV"; break;
+   default:
+      return sv_2mortal(newSViv(val));
+   }
+   return sv_2mortal(nf_newSVivpv(val, pv));
+}
+
+/* END GENERATED ENUM IMPLEMENTATION */
+
 nf_fieldinfo_t * nf_fieldset_add_field(pTHX_ nf_fieldset_t *self, SV *name) {
    nf_fieldinfo_key_t key= { name, 0 };
    size_t i;
@@ -422,15 +575,15 @@ nf_fieldstorage_t * nf_fieldstorage_clone(pTHX_ nf_fieldstorage_t *orig) {
    SV **sv_p;
    for (i= orig->field_count-1; i >= 0; i--) {
       finfo= self->fieldset->fields+i;
-      if (finfo->flags & NF_FIELDINFO_TYPE_SV) {
+      if (finfo->flags & NF_FIELD_TYPE_SV) {
          // TODO: when cloning for threads, is this good enough?
          // Will the new interpreter try to share CoW with the old?
          sv_p= (SV**)(self->data + finfo->storage_ofs);
          if (*sv_p) {
-            switch (finfo->flags & NF_FIELDINFO_TYPE_MASK) {
-            case NF_FIELDINFO_TYPE_SV: *sv_p= newSVsv(*sv_p); break;
-            case NF_FIELDINFO_TYPE_AV: *sv_p= (SV*) av_make(1+av_len((AV*) *sv_p), AvARRAY((AV*) *sv_p)); break;
-            case NF_FIELDINFO_TYPE_HV: *sv_p= (SV*) newHVhv((HV*) *sv_p); break;
+            switch (NF_FIELDINFO_TYPE(finfo)) {
+            case NF_FIELD_TYPE_SV: *sv_p= newSVsv(*sv_p); break;
+            case NF_FIELD_TYPE_AV: *sv_p= (SV*) av_make(1+av_len((AV*) *sv_p), AvARRAY((AV*) *sv_p)); break;
+            case NF_FIELD_TYPE_HV: *sv_p= (SV*) newHVhv((HV*) *sv_p); break;
             default: croak("bug");
             }
          }
@@ -446,7 +599,7 @@ void nf_fieldstorage_free(pTHX_ nf_fieldstorage_t *self) {
    int i, type;
    for (i= fset->field_count-1; i >= 0; i--) {
       finfo= fset->fields[i];
-      if ((finfo->flags & NF_FIELDINFO_TYPE_SV) && finfo->storage_ofs < self->storage_size) {
+      if ((finfo->flags & NF_FIELD_TYPE_SV) && finfo->storage_ofs < self->storage_size) {
          sv_p= (SV**)(self->data + finfo->storage_ofs);
          if (*sv_p) SvREFCNT_dec(*sv_p);
       }
@@ -456,14 +609,14 @@ void nf_fieldstorage_free(pTHX_ nf_fieldstorage_t *self) {
 }
 
 void nf_fieldstorage_field_init_default(pTHX_ nf_fieldstorage_t *self, nf_fieldinfo_t *finfo) {
-   int type= finfo->flags & NF_FIELDINFO_TYPE_MASK;
+   int type= NF_FIELDINFO_TYPE(finfo);
    char *stor_p= self->data + finfo->storage_ofs;
-   if (!(finfo->flags & NF_FIELDINFO_HAS_DEFAULT))
+   if (!(finfo->flags & NF_FIELD_HAS_DEFAULT))
       return;
    switch (type) {
-   case NF_FIELDINFO_TYPE_SV: *((SV**)stor_p)= newSVsv(finfo->def_val.sv); break;
-   case NF_FIELDINFO_TYPE_AV: *((AV**)stor_p)= nf_newAVav(finfo->def_val.av); break;
-   case NF_FIELDINFO_TYPE_HV: *((HV**)stor_p)= newHVhv(finfo->def_val.hv); break;
+   case NF_FIELD_TYPE_SV: *((SV**)stor_p)= newSVsv(finfo->def_val.sv); break;
+   case NF_FIELD_TYPE_AV: *((AV**)stor_p)= nf_newAVav(finfo->def_val.av); break;
+   case NF_FIELD_TYPE_HV: *((HV**)stor_p)= newHVhv(finfo->def_val.hv); break;
    default:
       croak("nf_fieldstorage_field_init_default: Unhandled type 0x%02X", type);
    }
@@ -471,11 +624,11 @@ void nf_fieldstorage_field_init_default(pTHX_ nf_fieldstorage_t *self, nf_fieldi
 
 bool nf_fieldstorage_field_exists(pTHX_ nf_fieldstorage_t *self, nf_fieldinfo_t *finfo) {
    SV **sv_p;
-   int type= finfo->flags & NF_FIELDINFO_TYPE_MASK;
-   if (!(type & NF_FIELDINFO_TYPE_SV))
+   int type= NF_FIELDINFO_TYPE(finfo);
+   if (!(type & NF_FIELD_TYPE_SV))
       croak("Not an SV field");
    // It always exists if it has a default (even if we didn't lazy-initialize it yet)
-   if (finfo->flags & NF_FIELDINFO_HAS_DEFAULT)
+   if (finfo->flags & NF_FIELD_HAS_DEFAULT)
       return true;
    // It exists if the pointer is assigned.
    sv_p= (SV**)(self->data + finfo->storage_ofs);
@@ -488,9 +641,9 @@ bool nf_fieldstorage_field_exists(pTHX_ nf_fieldstorage_t *self, nf_fieldinfo_t 
 // It is intended that this value be assigned to another lvalue SV.
 SV *nf_fieldstorage_field_rvalue(pTHX_ nf_fieldstorage_t *self, nf_fieldinfo_t *finfo) {
    SV **sv_p;
-   int type= finfo->flags & NF_FIELDINFO_TYPE_MASK;
-   int has_default= finfo->flags & NF_FIELDINFO_HAS_DEFAULT;
-   if (type & NF_FIELDINFO_TYPE_SV) {
+   int type= NF_FIELDINFO_TYPE(finfo);
+   int has_default= finfo->flags & NF_FIELD_HAS_DEFAULT;
+   if (type & NF_FIELD_TYPE_SV) {
       sv_p= (SV**)(self->data + finfo->storage_ofs);
       if (!*sv_p && has_default)
          nf_fieldstorage_field_init_default(aTHX_ self, finfo);
@@ -509,9 +662,9 @@ SV *nf_fieldstorage_field_rvalue(pTHX_ nf_fieldstorage_t *self, nf_fieldinfo_t *
 // return true.
 SV *nf_fieldstorage_field_lvalue(pTHX_ nf_fieldstorage_t *self, nf_fieldinfo_t *finfo) {
    SV **sv_p;
-   int type= finfo->flags & NF_FIELDINFO_TYPE_MASK;
-   int has_default= finfo->flags & NF_FIELDINFO_HAS_DEFAULT;
-   if (type & NF_FIELDINFO_TYPE_SV) {
+   int type= NF_FIELDINFO_TYPE(finfo);
+   int has_default= finfo->flags & NF_FIELD_HAS_DEFAULT;
+   if (type & NF_FIELD_TYPE_SV) {
       sv_p= (SV**)(self->data + finfo->storage_ofs);
       if (!*sv_p) {
          if (has_default)
@@ -543,15 +696,15 @@ void nf_hv_copy(pTHX_ HV *dest, SV *src) {
 void nf_fieldstorage_field_setsv(pTHX_ nf_fieldstorage_t *self, nf_fieldinfo_t *finfo, SV *value) {
    SV **av_array;
    size_t av_array_n;
-   int type= finfo->flags & NF_FIELDINFO_TYPE_MASK;
+   int type= NF_FIELDINFO_TYPE(finfo);
    switch (type) {
-   case NF_FIELDINFO_TYPE_SV: {
+   case NF_FIELD_TYPE_SV: {
          SV **sv_p= (SV**)(self->data + finfo->storage_ofs);
          if (*sv_p) sv_setsv(*sv_p, value);
          else *sv_p= newSVsv(value);
       }
       break;
-   case NF_FIELDINFO_TYPE_AV: {
+   case NF_FIELD_TYPE_AV: {
          AV **av_p= (AV**)(self->data + finfo->storage_ofs);
          AV *src_av= (SvTYPE(value) == SVt_PVAV)? (AV*)value
             : SvROK(value) && SvTYPE(SvRV(value)) == SVt_PVAV? (AV*)SvRV(value)
@@ -564,7 +717,7 @@ void nf_fieldstorage_field_setsv(pTHX_ nf_fieldstorage_t *self, nf_fieldinfo_t *
                av_extend(*av_p, av_len(src_av));
                
          
-   case NF_FIELDINFO_TYPE_HV:
+   case NF_FIELD_TYPE_HV:
    }
 }
 #endif
@@ -679,24 +832,18 @@ fieldset_for_package(pkg)
       nf_fieldset_link_to_package(aTHX_ fset, pkg_str);
       XSRETURN(1);
 
-//void
-//field_rvalue(obj, fieldset, field_idx)
-//   SV *obj
-//   nf_fieldset_t *fieldset
-//   UV field_idx
-//   INIT:
-//      nf_fieldstorage_t *fstor;
-//      nf_fieldinfo_t *finf;
-//   PPCODE:
-//      if (!SvROK(obj))
-//         croak("field_rvalue can only be called on references");
-//      if (field_idx >= fieldset->field_count)
-//         croak("field_idx out of bounds");
-//      fstor= nf_fieldstorage_magic_get(aTHX_ SvRV(obj), fieldset, 0);
-//      if (fstor && field_idx < fstor->field_count) {
-//         finf= fieldset->fields[field_idx];
-//         finf->
-
+void
+field_type(sv)
+   SV *sv;
+   INIT:
+      int type;
+   PPCODE:
+      if (!nf_field_type_parse(aTHX_ sv, &type))
+         ST(0)= &PL_sv_undef;
+      else
+         ST(0)= nf_field_type_get_sv(aTHX_ type);
+      XSRETURN(1);
+      
 MODULE = NERDVANA::Field                  PACKAGE = NERDVANA::Field::FieldSet
 
 void

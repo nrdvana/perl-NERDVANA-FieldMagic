@@ -1,6 +1,16 @@
 TYPEMAP
 nf_fieldset_t*             O_NerdvanaFieldSet
+nf_field_type_t            O_NrdvanaFieldType
 
 INPUT
 O_NerdvanaFieldSet
    $var= nf_fieldset_magic_get(aTHX_ $arg, OR_DIE);
+
+INPUT
+O_NerdvanaFieldType
+   if (!nf_field_type_parse(aTHX_ $arg, &($var))
+       croak("Invalid field type %s", SvPV_nolen($arg));
+
+OUTPUT
+O_NerdvanaFieldType
+  $arg= nf_field_type_get_sv(aTHX_ $var);

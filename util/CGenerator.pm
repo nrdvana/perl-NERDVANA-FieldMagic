@@ -47,6 +47,13 @@ sub patch_source($self, $fname, $patch_markers=undef) {
       join "\n", $self->private_decl->@*, $self->private_type->@*, $self->private_impl->@*);
 }
 
+sub _slurp_file($self, $fname) {
+   open my $fh, '<', $fname or die "open($fname): $!";
+   my $content= do { local $/= undef; <$fh> };
+   $fh->close or die "close: $!";
+   $content;
+}
+
 sub _patch_file($self, $fname, $patch_markers, $new_content) {
    open my $fh, '+<', $fname or die "open($fname): $!";
    my $content= do { local $/= undef; <$fh> };

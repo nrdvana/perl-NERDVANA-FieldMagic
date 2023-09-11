@@ -172,30 +172,31 @@ static int nf_fieldset_magic_dup(pTHX_ MAGIC *mg, CLONE_PARAMS *param) {
    return 0;
 };
 #else
-#define nf_fieldstorage_map_magic_dup NULL
+#define nf_fieldset_magic_dup NULL
 #endif
 static MGVTBL nf_fieldset_magic_vt= {
-   NULL, NULL, NULL, NULL,
-   nf_fieldset_magic_free, NULL, nf_fieldset_magic_dup,
+   NULL, NULL, NULL, NULL, nf_fieldset_magic_free,
+   NULL, nf_fieldset_magic_dup
 #ifdef MGf_LOCAL
    ,NULL
 #endif
 };
 
 SV * nf_fieldset_get_wrapper(pTHX_ nf_fieldset_t *self) {
+   MAGIC *magic;
    SV *ref;
    if (!self->wrapper) {
       self->wrapper= newHV();
-      magic= sv_magicext(self->wrapper, NULL, PERL_MAGIC_ext, &nf_fieldset_magic_vt, (char*) self, 0);
+      magic= sv_magicext((SV*)self->wrapper, NULL, PERL_MAGIC_ext, &nf_fieldset_magic_vt, (char*) self, 0);
       #ifdef USE_ITHREADS
       magic->mg_flags |= MGf_DUP;
       #else
       (void)magic; // suppress warning
       #endif
-      ref= sv_2mortal(newRV_noinc(self->wrapper));
+      ref= sv_2mortal(newRV_noinc((SV*)self->wrapper));
       sv_bless(ref, gv_stashpvn("NERDVANA::Field::FieldSet", 25, GV_ADD));
    } else {
-      ref= sv_2mortal(newRV_inc(self->wrapper));
+      ref= sv_2mortal(newRV_inc((SV*)self->wrapper));
    }
    return ref;
 }
@@ -217,18 +218,18 @@ static int nf_fieldset_pkg_stash_magic_dup(pTHX_ MAGIC *mg, CLONE_PARAMS *param)
    return 0;
 };
 #else
-#define nf_fieldstorage_map_magic_dup NULL
+#define nf_fieldset_pkg_stash_magic_dup NULL
 #endif
-static MGVTBL nf_fieldset_magic_vt= {
-   NULL, NULL, NULL, NULL,
-   nf_fieldset_pkg_stash_magic_free, NULL, nf_fieldset_pkg_stash_magic_dup,
+static MGVTBL nf_fieldset_pkg_stash_magic_vt= {
+   NULL, NULL, NULL, NULL, nf_fieldset_pkg_stash_magic_free,
+   NULL, nf_fieldset_pkg_stash_magic_dup
 #ifdef MGf_LOCAL
    ,NULL
 #endif
 };
 
 void nf_fieldset_link_to_package(pTHX_ nf_fieldset_t *self, HV *pkg_stash) {
-   MAGIC *mg;
+   MAGIC *magic;
    // It's an error if we are already linked to a package stash.
    if (self->pkg_stash_ref && SvRV(self->pkg_stash_ref) && SvOK(SvRV(self->pkg_stash_ref)))
       croak("FieldSet is already linked to a package");
@@ -239,11 +240,11 @@ void nf_fieldset_link_to_package(pTHX_ nf_fieldset_t *self, HV *pkg_stash) {
             croak("package already has a FieldSet");
    }
    // magically attach 'self' to the package stash
-   mg= sv_magicext((SV*) pkg_stash, NULL, PERL_MAGIC_ext, &nf_fieldset_pkg_stash_magic_vt, (char*) self, 0);
+   magic= sv_magicext((SV*) pkg_stash, NULL, PERL_MAGIC_ext, &nf_fieldset_pkg_stash_magic_vt, (char*) self, 0);
    #ifdef USE_ITHREADS
    magic->mg_flags |= MGf_DUP;
    #else
-   (void)mg; // suppress warning
+   (void)magic; // suppress warning
    #endif
    // The package stash will now hold a strong reference to us.
    // The wrapper is where we keep the refcount for self, so it needs to exist.
@@ -251,7 +252,7 @@ void nf_fieldset_link_to_package(pTHX_ nf_fieldset_t *self, HV *pkg_stash) {
       nf_fieldset_get_wrapper(aTHX_ self);
    SvREFCNT_inc(self->wrapper);
    // Now create a weak-ref from self to the package stash
-   self->pkg_stash_ref= newRV_inc(pkg_stash);
+   self->pkg_stash_ref= newRV_inc((SV*)pkg_stash);
    sv_rvweaken(self->pkg_stash_ref);
 }
 
@@ -478,15 +479,15 @@ nf_fieldstorage_map_t * nf_fieldstorage_map_alloc(pTHX_ size_t capacity) {
 }
 
 // Take a guess that if it is being cloned, the el_count is as large as it needs to be.
-nf_fieldstorage_map_t * nf_fieldstorage_map_clone(pTHX_ nf_fieldstorage_map_t *orig) {
-   nf_fieldstorage_map_t *self= nf_fieldstorage_map_alloc(aTHX_ orig->el_count);
-   int i;
-   for (i= orig->el_count-1; i >= 0; i--)
-      self->el[i]= nf_fieldstorage_clone(aTHX_ orig->el[i]);
-   self->el_count= orig->el_count;
-   nf_fieldstorage_map_hashtree_reindex(self->el + self->capacity, self->capacity, self->el, 1, self->el_count);
-   return self;
-}
+//nf_fieldstorage_map_t * nf_fieldstorage_map_clone(pTHX_ nf_fieldstorage_map_t *orig) {
+//   nf_fieldstorage_map_t *self= nf_fieldstorage_map_alloc(aTHX_ orig->el_count);
+//   int i;
+//   for (i= orig->el_count-1; i >= 0; i--)
+//      self->el[i]= nf_fieldstorage_clone(aTHX_ orig->el[i]);
+//   self->el_count= orig->el_count;
+//   nf_fieldstorage_map_hashtree_reindex(self->el + self->capacity, self->capacity, self->el, 1, self->el_count);
+//   return self;
+//}
 
 void nf_fieldstorage_map_free(pTHX_ nf_fieldstorage_map_t *self) {
    int i;
@@ -546,7 +547,7 @@ nf_fieldstorage_t * nf_fieldstorage_alloc(pTHX_ nf_fieldset_t *fset) {
       1);
    self->fieldset= fset;
    self->storage_size= fset->storage_size;
-   SvREFCNT_inc(fset->pkg_stash);
+   SvREFCNT_inc(fset->pkg_stash_ref);
    return self;
 }
 
@@ -604,7 +605,7 @@ void nf_fieldstorage_free(pTHX_ nf_fieldstorage_t *self) {
          if (*sv_p) SvREFCNT_dec(*sv_p);
       }
    }
-   SvREFCNT_dec(fset->pkg_stash);
+   SvREFCNT_dec(fset->pkg_stash_ref);
    Safefree(self);
 }
 
@@ -829,7 +830,7 @@ fieldset_for_package(pkg)
       fset= nf_fieldset_alloc(aTHX_);
       // create the wrapper first so that there is a refcount to clean it up if next line dies
       ST(0)= nf_fieldset_get_wrapper(aTHX_ fset);
-      nf_fieldset_link_to_package(aTHX_ fset, pkg_str);
+      nf_fieldset_link_to_package(aTHX_ fset, pkg_stash);
       XSRETURN(1);
 
 void
@@ -850,29 +851,57 @@ void
 new(cls)
    const char *cls
    INIT:
-      nf_fieldset_t *fset;
+      nf_fieldset_t *self;
    PPCODE:
-      fset= nf_fieldset_alloc(aTHX_);
-      ST(0)= nf_fieldset_get_wrapper(aTHX_ fset);
+      self= nf_fieldset_alloc(aTHX_);
+      ST(0)= nf_fieldset_get_wrapper(aTHX_ self);
+      // Allow it to be blessed as something else
       if (strcmp(cls, "NERDVANA::Field::FieldSet") != 0)
          sv_bless(ST(0), gv_stashpv(cls, GV_ADD));
       XSRETURN(1);
 
 IV
-field_count(fs)
-   nf_fieldset_t *fs
+field_count(self)
+   nf_fieldset_t *self
    CODE:
-      RETVAL= fs->field_count;
+      RETVAL= self->field_count;
    OUTPUT:
       RETVAL
 
-//void
-//field(fs, name)
-//   nf_fieldset_t *fs
-//   SV *name
-//   INIT:
-//      nf_fieldinfo_t *field= nf_fieldset_get_field(fs, name, 0);
-//   PPCODE:
-//      ST(0)= field? newSVuv((UV)field) : &PL_sv_undef;
-//      XSRETURN(1);
+IV
+_capacity(self)
+   nf_fieldset_t *self
+   CODE:
+      RETVAL= self->capacity;
+   OUTPUT:
+      RETVAL
+
+IV
+_storage_size(self)
+   nf_fieldset_t *self
+   CODE:
+      RETVAL= self->storage_size;
+   OUTPUT:
+      RETVAL
+
+void
+add_field(self, name, type, ...)
+   nf_fieldset_t *self
+   SV *name
+   SV *type
+   INIT:
+      nf_fieldinfo_t *t= 
+   PPCODE:
+      
+      nf_fieldset_add_field(self, name);
+
+void
+field(fs, name)
+   nf_fieldset_t *fs
+   SV *name
+   INIT:
+      nf_fieldinfo_t *field= nf_fieldset_get_field(fs, name, 0);
+   PPCODE:
+      ST(0)= field? newSVuv((UV)field) : &PL_sv_undef;
+      XSRETURN(1);
 

@@ -71,17 +71,17 @@ Return a L<NERDVANA::Field::FieldSet> that describes the fields of a named packa
 If create is false, the return value will be C<undef> unless fields have been initialized
 for that package.
 
+=head2 field_type
+
+  $dualvar= NRDVANA::Field::field_type('SV');
+  $dualvar= NRDVANA::Field::field_type(0x81);
+
+Takes either a string or a number, and gives you a dualvar SV that tell you both answers.
+If the name or number is not valid, this returns C<undef>.
+
 =head2 anonymous_fieldset
 
-  $fieldset = anonymous_fieldset();
-
-Create a new L<NERDVANA::Field::FieldSet> which is not associated with any package.
-The fields of this fieldset will not be available as lexical variable names during an eval,
-but can act as generic storage attached to arbitrary objects that are guaranteed not to
-interfere with other attributes, and which are faster and lighter than using inside-out
-techniques like using the object's address as a key to an external hash.
-
-These fields cannot be serialized.
+Shortcut for L<NERDVANA::Field/new>.
 
 =head2 get_object_fieldsets
 

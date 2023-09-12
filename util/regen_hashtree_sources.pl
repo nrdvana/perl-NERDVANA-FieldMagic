@@ -48,6 +48,7 @@ for (
    $_->find_fn;
    $_->reindex_fn;
    $_->structcheck_fn;
+   $_->print_fn;
 }
 $htgen->patch_header("$FindBin::RealBin/../Field.xs");
 $htgen->patch_source("$FindBin::RealBin/../hashtree.c");

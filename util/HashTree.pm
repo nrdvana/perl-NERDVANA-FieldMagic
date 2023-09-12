@@ -326,7 +326,7 @@ sub reindex_fn($self) {
                   if (!$treecheck(hashtree, el_i, *bucket, 0,
                      NULL, NULL, &err_msg, &err_node
                   )) {
-                     $treeprint(hashtree, *bucket, err_node, 0);
+                     $treeprint(hashtree, capacity, *bucket, err_node, stderr);
                      warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
                      return false;
                   }
@@ -518,51 +518,107 @@ sub treeprint_fn($self, $word_idx) {
       my $word_max= $self->word_max_capacity->[$word_idx];
       my $max_tree_height= $self->word_max_tree_height->[$word_idx];
       <<~C
-      struct ${name}_node_path {
-         struct ${name}_node_path *next;
-         $word_t node, max_node, mark_node;
-         bool left;
-         int depth;
-      };
-      static void ${name}_re($word_t *hashtree, struct ${name}_node_path *root, struct ${name}_node_path *leaf) {
-         struct ${name}_node_path path_el= { NULL, 0, 0, 0, false, 0 }, *p;
-         bool cycle= false;
-         if (!leaf->node) return;
-         leaf->next= &path_el;
-         path_el.depth= leaf->depth + 1;
-         for (p= root; p != leaf; p= p->next)
-            if (p->node == leaf->node)
-               cycle= true;
-         if (!cycle && leaf->depth <= $max_tree_height && leaf->node <= root->max_node) {
-            path_el.node= HASHTREE_RIGHT(leaf->node);
-            ${name}_re(hashtree, root, &path_el);
+      static size_t $name($word_t *hashtree, $word_t max_node, $word_t node, $word_t mark_node, FILE * out) {
+         $word_t node_path[ 1+$max_tree_height ];
+         bool cycle;
+         int i, pos, step= 0;
+         size_t nodecount= 0;
+         if (!node) {
+            fprintf(out, "(empty tree)\\n");
+            return 0;
          }
-         if (root != leaf) {
-            for (p= root; p->next != leaf; p= p->next)
-               fprintf(stderr, "   %c", p->next->left == p->next->next->left? ' ' : '|');
-            fprintf(stderr, "   %c", leaf->left? '\`' : ',');
+         node_path[0]= 0;
+         node_path[pos= 1]= node << 1;
+         while (node && pos) {
+            switch (step) {
+            case 0:
+               // Check for cycles
+               cycle= false;
+               for (i= 1; i < pos; i++)
+                  if ((node_path[i]>>1) == (node_path[pos]>>1))
+                     cycle= true;
+               
+               // Proceed down right subtree if possible
+               if (!cycle && pos < $max_tree_height && node <= max_node && HASHTREE_RIGHT(node)) {
+                  node= HASHTREE_RIGHT(node);
+                  node_path[++pos]= node << 1;
+                  continue;
+               }
+            case 1:
+               // Print tree branches for nodes up until this one
+               for (i= 2; i < pos; i++)
+                  fprintf(out, (node_path[i]&1) == (node_path[i+1]&1)? "    " : "   |");
+               if (pos > 1)
+                  fprintf(out, (node_path[pos]&1)? "   \`" : "   ,");
+               
+               // Print content of this node
+               fprintf(out, "--%c%c%c %ld %ld%s\\n",
+                  (node == mark_node? '(' : '-'),
+                  (node > max_node? '!' : HASHTREE_IS_RED(node)? 'R':'B'),
+                  (node == mark_node? ')' : ' '),
+                  (long) node, (long)sizeof(node),
+                  cycle? " CYCLE DETECTED"
+                     : pos >= $max_tree_height? " MAX DEPTH EXCEEDED"
+                     : node > max_node? " VALUE OUT OF BOUNDS"
+                     : ""
+               );
+               ++nodecount;
+               
+               // Proceed down left subtree if possible
+               if (!cycle && pos < $max_tree_height && node <= max_node && HASHTREE_LEFT(node)) {
+                  node= HASHTREE_LEFT(node);
+                  node_path[++pos]= (node << 1) | 1;
+                  step= 0;
+                  continue;
+               }
+            case 2:
+               // Return to parent
+               step= (node_path[pos]&1) + 1;
+               node= node_path[--pos] >> 1;
+               cycle= false;
+            }
          }
-         fprintf(stderr, "--%c%c%c %d%s\\n",
-            (leaf->node == root->mark_node? '(' : '-'),
-            (leaf->node > root->max_node? '!' : HASHTREE_IS_RED(leaf->node)? 'R':'B'),
-            (leaf->node == root->mark_node? ')' : ' '),
-            leaf->node,
-            cycle? " CYCLE DETECTED"
-               : leaf->depth > $max_tree_height? " MAX DEPTH EXCEEDED"
-               : leaf->node > root->max_node? " VALUE OUT OF BOUNDS"
-               : ""
-         );
-         if (!cycle && leaf->depth <= $max_tree_height && leaf->node <= root->max_node) {
-            path_el.node= HASHTREE_LEFT(leaf->node);
-            path_el.left= true;
-            ${name}_re(hashtree, root, &path_el);
-         }
-         leaf->next= NULL;
+         return nodecount;
       }
-      static void $name($word_t *hashtree, $word_t max_node, $word_t node, $word_t mark_node) {
-         struct ${name}_node_path path_root= { NULL, node, max_node, mark_node, true, 1 };
-         if (!node) fprintf(stderr, "(empty tree)\\n");
-         else ${name}_re(hashtree, &path_root, &path_root);
+      C
+   });
+}
+
+sub print_fn($self) {
+   my $name= $self->common_namespace . '_print';
+   $self->generate_once($self->private_impl, $name, sub {
+      push $self->public_decl->@* , <<~C;
+      void $name(void *hashtree, size_t capacity, FILE *out);
+      C
+      my $code= <<~C;
+      void $name(void *hashtree, size_t capacity, FILE *out) {
+         size_t n_buckets= @{[ $self->macro_table_buckets('capacity') ]}, node, used= 0, collision= 0;
+         fprintf(out, "# hashtree for %ld elements, %ld hash buckets\\n", (long) capacity, (long) n_buckets);
+      C
+      for (0..$self->max_word_idx) {
+         my $bits= ((8 << $_)-1);
+         my $word_t= $self->word_types->[$_];
+         my $word_max= $self->word_max_capacity->[$_];
+         my $treeprint= $self->treeprint_fn($_);
+         $code .= <<~C
+         @{[ $_? "else ":"" ]}if (capacity <= @{[ sprintf("0x%X", $word_max) ]} ) {
+            $word_t *nodes= ($word_t*) hashtree;
+            $word_t *table= nodes + (1 + capacity)*2;
+            int i;
+            for (i= 0; i < n_buckets; i++) {
+               if (i && (i & 0xF) == 0)
+                  fprintf(out, "# bucket 0x%lx\\n", i);
+               if (table[i]) {
+                  ++used;
+                  collision += $treeprint(hashtree, capacity, table[i], 0, out) - 1;
+               } else
+                  fprintf(out, "-\\n");
+            }
+         }
+      C
+      }
+      $code .= <<~C
+         fprintf(out, "# used %ld / %ld buckets, %ld collisions\\n", (long) used, (long) n_buckets, (long) collision);
       }
       C
    });
@@ -607,7 +663,7 @@ sub structcheck_fn($self) {
                   if (!$treecheck(hashtree, max_el, *bucket, 0,
                      NULL, &blackcount, &err_msg, &err_node
                   )) {
-                     $treeprint(hashtree, max_el, *bucket, err_node);
+                     $treeprint(hashtree, max_el, *bucket, err_node, stderr);
                      warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
                      success= false;
                   }
@@ -649,7 +705,7 @@ sub structcheck_fn($self) {
          }
          C
          $code .= <<~C
-            if (capacity < @{[ sprintf("0x%X", $word_max) ]})
+            if (capacity <= @{[ sprintf("0x%X", $word_max) ]})
                return $name_with_bitsuffix(aTHX_ ($word_t*)hashtree, capacity, elemdata, max_el);
          C
       }

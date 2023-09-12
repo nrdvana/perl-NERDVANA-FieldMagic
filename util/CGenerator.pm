@@ -27,7 +27,7 @@ sub generate_once($self, $list, $name, $source) {
 }
 
 sub namespace($self) {
-   $self->{namespace} // 'hashtree'
+   $self->{namespace} // 'rbhash'
 }
 
 sub prefix_with_ns($self, $value) {

@@ -2,16 +2,16 @@
 use v5.36;
 use FindBin;
 use lib $FindBin::RealBin;
-use HashTree;
+use RBHash;
 
-my $htgen= HashTree->new(
-   namespace => 'nf_hashtree',
-   common_namespace => 'nf_hashtree',
+my $htgen= RBHash->new(
+   namespace => 'nf_rbhash',
+   common_namespace => 'nf_rbhash',
 );
-$htgen->macro_hashtree_size('capacity');
+$htgen->macro_rbhash_size('capacity');
 for (
    $htgen->override(
-      namespace     => 'nf_fieldset_hashtree',
+      namespace     => 'nf_fieldset_rbhash',
       elemdata_type => 'nf_fieldinfo_t **',
       key_type      => 'nf_fieldinfo_key_t *',
       macro_elem_hashcode => sub($self, $eldata, $el) {
@@ -28,7 +28,7 @@ for (
       }
    ),
    $htgen->override(
-      namespace     => 'nf_fieldstorage_map_hashtree',
+      namespace     => 'nf_fieldstorage_map_rbhash',
       elemdata_type => 'nf_fieldstorage_t **',
       key_type      => 'nf_fieldset_t *',
       macro_elem_hashcode => sub($self, $eldata, $el) {
@@ -51,4 +51,4 @@ for (
    $_->print_fn;
 }
 $htgen->patch_header("$FindBin::RealBin/../Field.xs");
-$htgen->patch_source("$FindBin::RealBin/../hashtree.c");
+$htgen->patch_source("$FindBin::RealBin/../rbhash.c");

@@ -24,7 +24,7 @@ struct nf_fieldset {
    /* pkg_stash is a weak-ref to the package stash which has these fields */
    SV *pkg_stash_ref;
    size_t storage_size;
-   /* fields[] is an array of the fields followed by a hashtree that looks them up by name */
+   /* fields[] is an array of the fields followed by a rbhash that looks them up by name */
    size_t field_count, capacity;
    nf_fieldinfo_t **fields;
 };
@@ -114,30 +114,30 @@ SV *nf_fieldstorage_field_get(pTHX_ nf_fieldstorage_t *self, size_t field_idx);
 void nf_fieldstorage_field_set(pTHX_ nf_fieldstorage_t *self, size_t field_idx, SV *value);
 void nf_fieldstorage_handle_new_fields(pTHX_ nf_fieldstorage_t **self_p);
 
-/* BEGIN GENERATED NF_HASHTREE HEADERS */
+/* BEGIN GENERATED NF_RBHASH HEADERS */
 // For a given capacity, this is how many hashtable buckets will be allocated
-#define NF_HASHTREE_TABLE_BUCKETS(capacity) ((capacity) + ((capacity) >> 1))
-// Size of hashtree structure, not including element array that it is appended to
+#define NF_RBHASH_TABLE_BUCKETS(capacity) ((capacity) + ((capacity) >> 1))
+// Size of rbhash structure, not including element array that it is appended to
 // This is a function of the max capacity of elements.
-#define NF_HASHTREE_SIZE(capacity) ( \
+#define NF_RBHASH_SIZE(capacity) ( \
    ((capacity) > 0x7FFFFFFF? 8 \
     : (capacity) > 0x7FFF? 4 \
     : (capacity) > 0x7F? 2 \
     : 1 \
    ) * ( \
      ((capacity)+1)*2 \
-     + NF_HASHTREE_TABLE_BUCKETS(capacity) \
+     + NF_RBHASH_TABLE_BUCKETS(capacity) \
    ))
-size_t nf_fieldset_hashtree_find(void *hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, nf_fieldinfo_key_t * search_key);
-bool nf_fieldset_hashtree_reindex(void *hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, size_t el_i, size_t last_i);
-bool nf_fieldset_hashtree_structcheck(pTHX_ void* hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, size_t max_el);
-void nf_hashtree_print(void *hashtree, size_t capacity, FILE *out);
-size_t nf_fieldstorage_map_hashtree_find(void *hashtree, size_t capacity, nf_fieldstorage_t ** elemdata, nf_fieldset_t * search_key);
-bool nf_fieldstorage_map_hashtree_reindex(void *hashtree, size_t capacity, nf_fieldstorage_t ** elemdata, size_t el_i, size_t last_i);
-bool nf_fieldstorage_map_hashtree_structcheck(pTHX_ void* hashtree, size_t capacity, nf_fieldstorage_t ** elemdata, size_t max_el);
-/* END GENERATED NF_HASHTREE HEADERS */
+size_t nf_fieldset_rbhash_find(void *rbhash, size_t capacity, nf_fieldinfo_t ** elemdata, nf_fieldinfo_key_t * search_key);
+bool nf_fieldset_rbhash_reindex(void *rbhash, size_t capacity, nf_fieldinfo_t ** elemdata, size_t el_i, size_t last_i);
+bool nf_fieldset_rbhash_structcheck(pTHX_ void* rbhash, size_t capacity, nf_fieldinfo_t ** elemdata, size_t max_el);
+void nf_rbhash_print(void *rbhash, size_t capacity, FILE *out);
+size_t nf_fieldstorage_map_rbhash_find(void *rbhash, size_t capacity, nf_fieldstorage_t ** elemdata, nf_fieldset_t * search_key);
+bool nf_fieldstorage_map_rbhash_reindex(void *rbhash, size_t capacity, nf_fieldstorage_t ** elemdata, size_t el_i, size_t last_i);
+bool nf_fieldstorage_map_rbhash_structcheck(pTHX_ void* rbhash, size_t capacity, nf_fieldstorage_t ** elemdata, size_t max_el);
+/* END GENERATED NF_RBHASH HEADERS */
 
-#include "hashtree.c"
+#include "rbhash.c"
 
 /**********************************************************************************************\
 * fieldset_t implementation
@@ -248,14 +248,14 @@ void nf_fieldset_link_to_package(pTHX_ nf_fieldset_t *self, HV *pkg_stash) {
 
 void nf_fieldset_extend(pTHX_ nf_fieldset_t *self, UV count) {
    if (count > self->capacity) {
-      size_t alloc= count * sizeof(nf_fieldinfo_t*) + NF_HASHTREE_SIZE(count);
+      size_t alloc= count * sizeof(nf_fieldinfo_t*) + NF_RBHASH_SIZE(count);
       Renewc(self->fields, 1, alloc, nf_fieldinfo_t*);
       self->capacity= count;
       // Need to clear all bytes beyond the end of self->fields+self->capacity
       memset(self->fields + self->field_count, 0, alloc - self->field_count * sizeof(nf_fieldinfo_t*));
       // Now re-index all the existing elements
-      if (!nf_fieldset_hashtree_reindex(self->fields + count, count, self->fields, 1, self->field_count))
-         croak("Corrupt hashtree");
+      if (!nf_fieldset_rbhash_reindex(self->fields + count, count, self->fields, 1, self->field_count))
+         croak("Corrupt rbhash");
    }
 }
 
@@ -447,7 +447,7 @@ nf_fieldinfo_t * nf_fieldset_add_field(pTHX_ nf_fieldset_t *self, SV *name, nf_f
    nf_fieldinfo_t *f;
    char *name_p= SvPV(name, len);
    PERL_HASH(key.name_hashcode, name_p, len);
-   if (nf_fieldset_hashtree_find(self->fields + self->capacity, self->capacity, self->fields, &key))
+   if (nf_fieldset_rbhash_find(self->fields + self->capacity, self->capacity, self->fields, &key))
       croak("Field %s already exists", SvPV_nolen(name));
    if (self->field_count >= self->capacity)
       nf_fieldset_extend(aTHX_ self, (self->capacity < 48? self->capacity + 16 : self->capacity + (self->capacity >> 1)));
@@ -484,7 +484,7 @@ nf_fieldinfo_t * nf_fieldset_add_field(pTHX_ nf_fieldset_t *self, SV *name, nf_f
       f->storage_ofs= (self->storage_size + align - 1) & ~(size_t)(align-1);
       self->storage_size= f->storage_ofs + size;
    }
-   nf_fieldset_hashtree_reindex(self->fields + self->capacity, self->capacity, self->fields, i+i, i+i);
+   nf_fieldset_rbhash_reindex(self->fields + self->capacity, self->capacity, self->fields, i+i, i+i);
    return self->fields[i];
 }
 
@@ -494,7 +494,7 @@ nf_fieldinfo_t * nf_fieldset_get_field(pTHX_ nf_fieldset_t *self, SV *name, int 
    STRLEN len;
    char *name_p= SvPV(name, len);
    PERL_HASH(key.name_hashcode, name_p, len);
-   i= nf_fieldset_hashtree_find(self->fields + self->capacity, self->capacity, self->fields, &key);
+   i= nf_fieldset_rbhash_find(self->fields + self->capacity, self->capacity, self->fields, &key);
    return i? self->fields[i-1] : NULL;
 }
 
@@ -506,7 +506,7 @@ nf_fieldstorage_map_t * nf_fieldstorage_map_alloc(pTHX_ size_t capacity) {
    nf_fieldstorage_map_t *self= (nf_fieldstorage_map_t *) safecalloc(
       sizeof(nf_fieldstorage_map_t)            // top-level struct info
       + sizeof(nf_fieldstorage_t*) * capacity  // element array
-      + NF_HASHTREE_SIZE(capacity),            // hashtree
+      + NF_RBHASH_SIZE(capacity),            // rbhash
       1);
    self->capacity= capacity;
    return self;
@@ -519,7 +519,7 @@ nf_fieldstorage_map_t * nf_fieldstorage_map_alloc(pTHX_ size_t capacity) {
 //   for (i= orig->el_count-1; i >= 0; i--)
 //      self->el[i]= nf_fieldstorage_clone(aTHX_ orig->el[i]);
 //   self->el_count= orig->el_count;
-//   nf_fieldstorage_map_hashtree_reindex(self->el + self->capacity, self->capacity, self->el, 1, self->el_count);
+//   nf_fieldstorage_map_rbhash_reindex(self->el + self->capacity, self->capacity, self->el, 1, self->el_count);
 //   return self;
 //}
 
@@ -536,7 +536,7 @@ nf_fieldstorage_t* nf_fieldstorage_map_get(pTHX_ nf_fieldstorage_map_t **self_p,
    nf_fieldstorage_t *fstor;
    // If called on a NULL pointer, fieldstorage is not found.
    i= !self? 0
-      : nf_fieldstorage_map_hashtree_find(self->el + capacity, capacity, self->el, fset);
+      : nf_fieldstorage_map_rbhash_find(self->el + capacity, capacity, self->el, fset);
    if (i) {
       --i;
       // Check for new fields added
@@ -556,13 +556,13 @@ nf_fieldstorage_t* nf_fieldstorage_map_get(pTHX_ nf_fieldstorage_map_t **self_p,
             Safefree(self);
          }
          *self_p= self= newself;
-         i= 1; // all need re-indexed; hashtree element numbers are 1-based
+         i= 1; // all need re-indexed; rbhash element numbers are 1-based
       } else {
          i= self->el_count+1;
       }
       // Allocate the fieldstorage and index it
       fstor= self->el[self->el_count++]= nf_fieldstorage_alloc(aTHX_ fset);
-      nf_fieldstorage_map_hashtree_reindex(self->el + self->capacity, self->capacity, self->el, i, self->el_count);
+      nf_fieldstorage_map_rbhash_reindex(self->el + self->capacity, self->capacity, self->el, i, self->el_count);
       return fstor;
    }
    else return NULL;

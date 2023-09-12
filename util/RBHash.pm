@@ -1,4 +1,4 @@
-package HashTree;
+package RBHash;
 use v5.36;
 use Carp;
 use Scalar::Util 'looks_like_number';
@@ -6,7 +6,7 @@ use parent "CGenerator";
 
 =head1 DESCRIPTION
 
-A HashTree is a data structure that provides fast lookup from a key to the numbers 1..N.
+A RBHash is a data structure that provides fast lookup from a key to the numbers 1..N.
 It is a combination of a hash table and red/black trees, where all hash collisions are
 added to trees so that performance never drops below log2(N).
 
@@ -34,10 +34,10 @@ Additionally, the user can tune some of the parameters of the algorithm:
 
 =head2 macro_elem_hashcode
 
-  $code= $hashtree->macro_elem_hashcode($elemdata_expr, $index_expr); # size_t
+  $code= $rbhash->macro_elem_hashcode($elemdata_expr, $index_expr); # size_t
   
   # Example:
-  $hashtree->override(
+  $rbhash->override(
     macro_elem_hashcode =>
       sub($self, $data, $idx) { "(($data)[$i]).name_hashcode" },
   }
@@ -55,10 +55,10 @@ sub macro_elem_hashcode($self, $elemdata_expr, $index_expr) {
 
 =head2 macro_key_hashcode
 
-  $code= $hashtree->macro_key_hashcode($key_expr); # size_t
+  $code= $rbhash->macro_key_hashcode($key_expr); # size_t
   
   # Example:
-  $hashtree->override(
+  $rbhash->override(
     macro_key_hashcode =>
       sub($self, $key) { "calc_hashcode($key)" }
   )
@@ -76,10 +76,10 @@ sub macro_key_hashcode($self, $key_expr) {
 
 =head2 macro_cmp_key_elem
 
-  $code= $hashtree->macro_cmp_key_elem($key_expr, $elemdata_expr, $index_expr);
+  $code= $rbhash->macro_cmp_key_elem($key_expr, $elemdata_expr, $index_expr);
   
   # Example
-  $hashtree->override(
+  $rbhash->override(
     macro_cmp_key_elem =>
       sub($self, $key, $data, $idx) { "strcmp($key, ($data)[$idx].name)" }
   )
@@ -99,10 +99,10 @@ sub macro_cmp_key_elem($self, $key_expr, $elemdata_expr, $index_expr) {
 
 =head2 macro_cmp_elem_elem
 
-  $code= $hashtree->macro_cmp_elem_elem($elemdata_expr, $idx1_expr, $idx2_expr);
+  $code= $rbhash->macro_cmp_elem_elem($elemdata_expr, $idx1_expr, $idx2_expr);
   
   # Example:
-  $hashtree->override(
+  $rbhash->override(
     macro_cmp_elem_elem =>
       sub($self, $data, $idx1, $idx2) {
         "strcmp(($data)[$idx1].name, ($data)[$idx2].name)"
@@ -123,7 +123,7 @@ sub macro_cmp_elem_elem($self, $elemdata_expr, $idx1_expr, $idx2_expr) {
 
 =head2 common_namespace
 
-This defaults to L</namespace>, but can be overridden to share generic hashtree functions
+This defaults to L</namespace>, but can be overridden to share generic rbhash functions
 with several more specific implementations.
 
 =head2 context_param
@@ -143,11 +143,11 @@ need to cast it as needed in your macros.
 =head2 word_types
 
 This specifies which C types should be used for 8-bit, 16-bit, 32-bit and so on.
-The hashtree automatically chooses a word size based on the C<capacity>.
+The rbhash automatically chooses a word size based on the C<capacity>.
 
 =head2 max_capacity
 
-The upper limit of what the hashtree should support.  For example, on 32-bit systems
+The upper limit of what the rbhash should support.  For example, on 32-bit systems
 there is no reason to generate code for 64-bit capacities.
 
 =cut
@@ -186,11 +186,11 @@ sub macro_table_buckets($self, $capacity_expr) {
    "$name($capacity_expr)"
 }
 
-sub macro_hashtree_size($self, $capacity_expr) {
+sub macro_rbhash_size($self, $capacity_expr) {
    my $name= uc($self->common_namespace . '_SIZE');
    $self->generate_once($self->public_decl, $name, sub {
       <<~C
-      // Size of hashtree structure, not including element array that it is appended to
+      // Size of rbhash structure, not including element array that it is appended to
       // This is a function of the max capacity of elements.
       #define $name(capacity) ( \\
          ((capacity) > 0x7FFFFFFF? 8 \\
@@ -225,12 +225,12 @@ sub find_fn($self) {
       my $elemdata_t= $self->elemdata_type;
       my $key_t= $self->key_type;
       push $self->public_decl->@* , <<~C;
-         size_t $name(void *hashtree, size_t capacity, $elemdata_t elemdata, $key_t search_key);
+         size_t $name(void *rbhash, size_t capacity, $elemdata_t elemdata, $key_t search_key);
          C
       my $code= <<~C;
          // Look up the search_key in the hashtable, walk the tree of conflicts, and
          // return the element index which matched.
-         size_t $name(void *hashtree, size_t capacity, $elemdata_t elemdata, $key_t search_key) {
+         size_t $name(void *rbhash, size_t capacity, $elemdata_t elemdata, $key_t search_key) {
             size_t n_buckets= @{[ $self->macro_table_buckets('capacity') ]};
             size_t el_hashcode, key_hashcode;
             int cmp;
@@ -242,14 +242,14 @@ sub find_fn($self) {
          my $word_max= $self->word_max_capacity->[$_];
          $code .= <<~C
             @{[ $_? 'else ':'' ]} if (capacity <= @{[ sprintf("0x%X", $word_max) ]}) {
-               $word_t node, *bucket= (($word_t *)hashtree) + (1 + capacity)*2 + (key_hashcode % n_buckets);
+               $word_t node, *bucket= (($word_t *)rbhash) + (1 + capacity)*2 + (key_hashcode % n_buckets);
                if ((node= *bucket)) {
                   do {
                      el_hashcode= @{[ $self->macro_elem_hashcode('elemdata', 'node') ]};
                      cmp= (key_hashcode == el_hashcode)? (@{[ $self->macro_cmp_key_elem('search_key', 'elemdata', 'node') ]})
                         : key_hashcode < el_hashcode? -1 : 1;
                      if (!cmp) return node;
-                     node= (($word_t *)hashtree)[ node*2 + (cmp < 0? 0 : 1) ] >> 1;
+                     node= (($word_t *)rbhash)[ node*2 + (cmp < 0? 0 : 1) ] >> 1;
                   } while (node);
                }
             }
@@ -267,10 +267,10 @@ sub reindex_fn($self) {
    $self->generate_once($self->private_impl, $name, sub {
       my $elemdata_t= $self->elemdata_type;
       push $self->public_decl->@* , <<~C;
-         bool $name(void *hashtree, size_t capacity, $elemdata_t elemdata, size_t el_i, size_t last_i);
+         bool $name(void *rbhash, size_t capacity, $elemdata_t elemdata, size_t el_i, size_t last_i);
          C
       my $code= <<~C;
-         bool $name(void *hashtree, size_t capacity, $elemdata_t elemdata, size_t el_i, size_t last_i) {
+         bool $name(void *rbhash, size_t capacity, $elemdata_t elemdata, size_t el_i, size_t last_i) {
             size_t n_buckets= @{[ $self->macro_table_buckets('capacity') ]};
             size_t el_hashcode, new_hashcode, pos;
             IV cmp;
@@ -290,7 +290,7 @@ sub reindex_fn($self) {
                const char *err_msg;
                for (; el_i <= last_i; el_i++) {
                   new_hashcode= @{[ $self->macro_elem_hashcode('elemdata', 'el_i') ]};
-                  bucket= (($word_t *)hashtree) + (1 + capacity)*2 + new_hashcode % n_buckets;
+                  bucket= (($word_t *)rbhash) + (1 + capacity)*2 + new_hashcode % n_buckets;
                   if (!(node= *bucket))
                      *bucket= el_i;
                   else {
@@ -303,30 +303,30 @@ sub reindex_fn($self) {
                         cmp= new_hashcode == el_hashcode? (@{[ $self->macro_cmp_elem_elem('elemdata', 'el_i', 'node') ]})
                            : new_hashcode < el_hashcode? -1 : 1;
                         tree_ref= node*2 + (cmp < 0? 0 : 1);
-                        node= (($word_t *)hashtree)[tree_ref] >> 1;
+                        node= (($word_t *)rbhash)[tree_ref] >> 1;
                      } while (node && pos < $max_tree_height);
                      if (pos > $max_tree_height) {
                         assert(pos <= $max_tree_height);
                         return false; // fatal error, should never happen unless datastruct corrupt
                      }
                      // Set left or right pointer of node to new node
-                     (($word_t *)hashtree)[tree_ref] |= el_i << 1;
+                     (($word_t *)rbhash)[tree_ref] |= el_i << 1;
                      // Set color of new node to red. other fields should be initialized to zero already
                      // Note that this is never the root of the tree because that happens automatically
                      // above when *bucket= el_i and node[el_i] is assumed to be zeroed (black) already.
-                     (($word_t *)hashtree)[ el_i*2 ]= 1;
+                     (($word_t *)rbhash)[ el_i*2 ]= 1;
                      if (pos > 1) { // no need to balance unless more than 1 parent
                         parents[0]= 0; // mark end of list
-                        $balance_fn(($word_t *)hashtree, parents+pos);
+                        $balance_fn(($word_t *)rbhash, parents+pos);
                         *bucket= parents[1]; // may have changed after tree balance
                         // tree root is always black
-                        (($word_t *)hashtree)[ parents[1]*2 ]= (($word_t *)hashtree)[ parents[1]*2 ] >> 1 << 1; 
+                        (($word_t *)rbhash)[ parents[1]*2 ]= (($word_t *)rbhash)[ parents[1]*2 ] >> 1 << 1; 
                      }
                   }
-                  if (!$treecheck(hashtree, el_i, *bucket, 0,
+                  if (!$treecheck(rbhash, el_i, *bucket, 0,
                      NULL, NULL, &err_msg, &err_node
                   )) {
-                     $treeprint(hashtree, capacity, *bucket, err_node, stderr);
+                     $treeprint(rbhash, capacity, *bucket, err_node, stderr);
                      warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
                      return false;
                   }
@@ -347,96 +347,96 @@ sub balance_fn($self, $word_idx) {
    my $word_t= $self->word_types->[$word_idx];
    my $name= $self->common_namespace . "_rb_balance_$bits";
    $self->generate_once($self->private_impl, $name, sub {
-      $self->generate_once($self->private_impl, 'HASHTREE_LEFT', sub { <<~C });
-         #define HASHTREE_LEFT(n)        (hashtree[(n)*2] >> 1)
-         #define HASHTREE_RIGHT(n)       (hashtree[(n)*2+1] >> 1)
-         #define HASHTREE_IS_RED(n)      (hashtree[(n)*2] & 1)
-         #define HASHTREE_SET_LEFT(n,v)  (hashtree[(n)*2]= (hashtree[(n)*2] & 1) | ((v)<<1))
-         #define HASHTREE_SET_RIGHT(n,v) (hashtree[(n)*2+1]= ((v)<<1))
-         #define HASHTREE_SET_RED(n)     (hashtree[(n)*2] |= 1)
-         #define HASHTREE_SET_BLACK(n)   (hashtree[(n)*2]= hashtree[(n)*2] >> 1 << 1)
+      $self->generate_once($self->private_impl, 'RBHASH_LEFT', sub { <<~C });
+         #define RBHASH_LEFT(n)        (rbhash[(n)*2] >> 1)
+         #define RBHASH_RIGHT(n)       (rbhash[(n)*2+1] >> 1)
+         #define RBHASH_IS_RED(n)      (rbhash[(n)*2] & 1)
+         #define RBHASH_SET_LEFT(n,v)  (rbhash[(n)*2]= (rbhash[(n)*2] & 1) | ((v)<<1))
+         #define RBHASH_SET_RIGHT(n,v) (rbhash[(n)*2+1]= ((v)<<1))
+         #define RBHASH_SET_RED(n)     (rbhash[(n)*2] |= 1)
+         #define RBHASH_SET_BLACK(n)   (rbhash[(n)*2]= rbhash[(n)*2] >> 1 << 1)
          C
       push $self->private_decl->@* , <<~C;
-         static void $name($word_t *hashtree, $word_t *parents);
+         static void $name($word_t *rbhash, $word_t *parents);
          C
       
       <<~C
       // balance a tree from parents[0] upward.  (parents is terminated by a 0 value)
       // nodes is the full array of tree nodes.
-      static void $name($word_t *hashtree, $word_t *parents) {
+      static void $name($word_t *rbhash, $word_t *parents) {
          $word_t pos= *parents--, newpos, parent;
          // if current is a black node, no rotations needed
-         while (pos && HASHTREE_IS_RED(pos)) {
+         while (pos && RBHASH_IS_RED(pos)) {
             if (!(parent= *parents))
                break;
             // current is red, the imbalanced child is red, and parent is black.
             // if the current is on the left of the parent, the parent is to the right
-            if (HASHTREE_LEFT(parent) == pos) {
+            if (RBHASH_LEFT(parent) == pos) {
                // if the sibling is also red, we can pull down the color black from the parent
-               if (HASHTREE_IS_RED(HASHTREE_RIGHT(parent))) {
-                  HASHTREE_SET_BLACK(HASHTREE_RIGHT(parent));
-                  HASHTREE_SET_BLACK(pos);
-                  HASHTREE_SET_RED(parent);
+               if (RBHASH_IS_RED(RBHASH_RIGHT(parent))) {
+                  RBHASH_SET_BLACK(RBHASH_RIGHT(parent));
+                  RBHASH_SET_BLACK(pos);
+                  RBHASH_SET_RED(parent);
                }
                else {
                   // if the imbalance (red node) is on the right, and the parent is on the right,
                   //  need to rotate those lower nodes over to the left.
-                  if (HASHTREE_IS_RED(HASHTREE_RIGHT(pos))) {
+                  if (RBHASH_IS_RED(RBHASH_RIGHT(pos))) {
                      // rotate pos left so parent's left now points to pos.right
-                     newpos= HASHTREE_RIGHT(pos);
-                     HASHTREE_SET_RIGHT(pos, HASHTREE_LEFT(newpos));
-                     HASHTREE_SET_LEFT(newpos, pos);
+                     newpos= RBHASH_RIGHT(pos);
+                     RBHASH_SET_RIGHT(pos, RBHASH_LEFT(newpos));
+                     RBHASH_SET_LEFT(newpos, pos);
                      pos= newpos;
                      // parent.left has not been updated here
                   }
                   // Now we can do our right rotation to balance the tree.
-                  HASHTREE_SET_LEFT(parent, HASHTREE_RIGHT(pos));
-                  HASHTREE_SET_RED(parent);
-                  HASHTREE_SET_RIGHT(pos, parent);
-                  HASHTREE_SET_BLACK(pos);
+                  RBHASH_SET_LEFT(parent, RBHASH_RIGHT(pos));
+                  RBHASH_SET_RED(parent);
+                  RBHASH_SET_RIGHT(pos, parent);
+                  RBHASH_SET_BLACK(pos);
                   // if the parent was the root of the tree, update the stack
                   // else update the grandparent to point to new parent.
                   if (!parents[-1])
                      *parents= pos;
-                  else if (HASHTREE_LEFT(parents[-1]) == parent)
-                     HASHTREE_SET_LEFT(parents[-1], pos);
+                  else if (RBHASH_LEFT(parents[-1]) == parent)
+                     RBHASH_SET_LEFT(parents[-1], pos);
                   else
-                     HASHTREE_SET_RIGHT(parents[-1], pos);
+                     RBHASH_SET_RIGHT(parents[-1], pos);
                   break;
                }
             }
             // else the parent is to the left.  Repeat mirror of code above
             else {
                // if the sibling is also red, we can pull down the color black from the parent
-               if (HASHTREE_IS_RED(HASHTREE_LEFT(parent))) {
-                  HASHTREE_SET_BLACK(HASHTREE_LEFT(parent));
-                  HASHTREE_SET_BLACK(pos);
-                  HASHTREE_SET_RED(parent);
+               if (RBHASH_IS_RED(RBHASH_LEFT(parent))) {
+                  RBHASH_SET_BLACK(RBHASH_LEFT(parent));
+                  RBHASH_SET_BLACK(pos);
+                  RBHASH_SET_RED(parent);
                }
                else {
                   // if the imbalance (red node) is on the left, and the parent is on the left,
                   //  need to rotate those lower nodes over to the right.
-                  if (HASHTREE_IS_RED(HASHTREE_LEFT(pos))) {
+                  if (RBHASH_IS_RED(RBHASH_LEFT(pos))) {
                      // rotate pos right so parent's right now points to pos.left
-                     newpos= HASHTREE_LEFT(pos);
-                     HASHTREE_SET_LEFT(pos, HASHTREE_RIGHT(newpos));
-                     HASHTREE_SET_RIGHT(newpos, pos);
+                     newpos= RBHASH_LEFT(pos);
+                     RBHASH_SET_LEFT(pos, RBHASH_RIGHT(newpos));
+                     RBHASH_SET_RIGHT(newpos, pos);
                      pos= newpos;
                      // parent.right has not been updated here
                   }
                   // Now we can do our left rotation to balance the tree.
-                  HASHTREE_SET_RIGHT(parent, HASHTREE_LEFT(pos));
-                  HASHTREE_SET_RED(parent);
-                  HASHTREE_SET_LEFT(pos, parent);
-                  HASHTREE_SET_BLACK(pos);
+                  RBHASH_SET_RIGHT(parent, RBHASH_LEFT(pos));
+                  RBHASH_SET_RED(parent);
+                  RBHASH_SET_LEFT(pos, parent);
+                  RBHASH_SET_BLACK(pos);
                   // if the parent was the root of the tree, update the stack
                   // else update the grandparent to point to new parent.
                   if (!parents[-1])
                      *parents= pos;
-                  else if (HASHTREE_LEFT(parents[-1]) == parent)
-                     HASHTREE_SET_LEFT(parents[-1], pos);
+                  else if (RBHASH_LEFT(parents[-1]) == parent)
+                     RBHASH_SET_LEFT(parents[-1], pos);
                   else
-                     HASHTREE_SET_RIGHT(parents[-1], pos);
+                     RBHASH_SET_RIGHT(parents[-1], pos);
                   break;
                }
             }
@@ -459,14 +459,14 @@ sub treecheck_fn($self, $word_idx) {
       <<~C
       // Gets called recursively to verify the Red/Black properties of the subtree at 'node'
       // Returns a message describing what was wrong, or NULL on success.
-      static bool $name($word_t *hashtree, $word_t max_node, $word_t node, int depth,
+      static bool $name($word_t *rbhash, $word_t max_node, $word_t node, int depth,
          int *depth_out, int *blackcount_out,
          const char **err_out, $word_t *err_node_out
       ) {
          $word_t subtree;
          const char *err= NULL;
          int i, blackcount[2]= { 0, 0 };
-         if (depth == 0 && HASHTREE_IS_RED(node)) {
+         if (depth == 0 && RBHASH_IS_RED(node)) {
             if (err_out) *err_out= "root node is red";
             if (err_node_out) *err_node_out= node;
             return false;
@@ -480,19 +480,19 @@ sub treecheck_fn($self, $word_idx) {
          if (depth_out && depth > *depth_out)
             *depth_out= depth;
          for (i=0; i < 2 && !err; i++) {
-            subtree= i? HASHTREE_RIGHT(node) : HASHTREE_LEFT(node);
+            subtree= i? RBHASH_RIGHT(node) : RBHASH_LEFT(node);
             if (subtree) {
                if (subtree > max_node) { // out of bounds?
                   if (err_out) *err_out= "node pointer out of bounds";
                   if (err_node_out) *err_node_out= node;
                   return false;
                }
-               else if (HASHTREE_IS_RED(node) && HASHTREE_IS_RED(subtree)) { // two adjacent reds?
+               else if (RBHASH_IS_RED(node) && RBHASH_IS_RED(subtree)) { // two adjacent reds?
                   if (err_out) *err_out= "adjacent red nodes";
                   if (err_node_out) *err_node_out= node;
                   return false;
                }
-               else if (!$name(hashtree, max_node, subtree, depth,
+               else if (!$name(rbhash, max_node, subtree, depth,
                   depth_out, blackcount+i, err_out, err_node_out))
                   return false;
             }
@@ -503,7 +503,7 @@ sub treecheck_fn($self, $word_idx) {
             return false;
          }
          if (blackcount_out)
-            *blackcount_out= blackcount[0] + (HASHTREE_IS_RED(node) ^ 1);
+            *blackcount_out= blackcount[0] + (RBHASH_IS_RED(node) ^ 1);
          return true;
       }
       C
@@ -518,7 +518,7 @@ sub treeprint_fn($self, $word_idx) {
       my $word_max= $self->word_max_capacity->[$word_idx];
       my $max_tree_height= $self->word_max_tree_height->[$word_idx];
       <<~C
-      static size_t $name($word_t *hashtree, $word_t max_node, $word_t node, $word_t mark_node, FILE * out) {
+      static size_t $name($word_t *rbhash, $word_t max_node, $word_t node, $word_t mark_node, FILE * out) {
          $word_t node_path[ 1+$max_tree_height ];
          bool cycle;
          int i, pos, step= 0;
@@ -539,8 +539,8 @@ sub treeprint_fn($self, $word_idx) {
                      cycle= true;
                
                // Proceed down right subtree if possible
-               if (!cycle && pos < $max_tree_height && node <= max_node && HASHTREE_RIGHT(node)) {
-                  node= HASHTREE_RIGHT(node);
+               if (!cycle && pos < $max_tree_height && node <= max_node && RBHASH_RIGHT(node)) {
+                  node= RBHASH_RIGHT(node);
                   node_path[++pos]= node << 1;
                   continue;
                }
@@ -554,7 +554,7 @@ sub treeprint_fn($self, $word_idx) {
                // Print content of this node
                fprintf(out, "--%c%c%c %ld %ld%s\\n",
                   (node == mark_node? '(' : '-'),
-                  (node > max_node? '!' : HASHTREE_IS_RED(node)? 'R':'B'),
+                  (node > max_node? '!' : RBHASH_IS_RED(node)? 'R':'B'),
                   (node == mark_node? ')' : ' '),
                   (long) node, (long)sizeof(node),
                   cycle? " CYCLE DETECTED"
@@ -565,8 +565,8 @@ sub treeprint_fn($self, $word_idx) {
                ++nodecount;
                
                // Proceed down left subtree if possible
-               if (!cycle && pos < $max_tree_height && node <= max_node && HASHTREE_LEFT(node)) {
-                  node= HASHTREE_LEFT(node);
+               if (!cycle && pos < $max_tree_height && node <= max_node && RBHASH_LEFT(node)) {
+                  node= RBHASH_LEFT(node);
                   node_path[++pos]= (node << 1) | 1;
                   step= 0;
                   continue;
@@ -588,12 +588,12 @@ sub print_fn($self) {
    my $name= $self->common_namespace . '_print';
    $self->generate_once($self->private_impl, $name, sub {
       push $self->public_decl->@* , <<~C;
-      void $name(void *hashtree, size_t capacity, FILE *out);
+      void $name(void *rbhash, size_t capacity, FILE *out);
       C
       my $code= <<~C;
-      void $name(void *hashtree, size_t capacity, FILE *out) {
+      void $name(void *rbhash, size_t capacity, FILE *out) {
          size_t n_buckets= @{[ $self->macro_table_buckets('capacity') ]}, node, used= 0, collision= 0;
-         fprintf(out, "# hashtree for %ld elements, %ld hash buckets\\n", (long) capacity, (long) n_buckets);
+         fprintf(out, "# rbhash for %ld elements, %ld hash buckets\\n", (long) capacity, (long) n_buckets);
       C
       for (0..$self->max_word_idx) {
          my $bits= ((8 << $_)-1);
@@ -602,7 +602,7 @@ sub print_fn($self) {
          my $treeprint= $self->treeprint_fn($_);
          $code .= <<~C
          @{[ $_? "else ":"" ]}if (capacity <= @{[ sprintf("0x%X", $word_max) ]} ) {
-            $word_t *nodes= ($word_t*) hashtree;
+            $word_t *nodes= ($word_t*) rbhash;
             $word_t *table= nodes + (1 + capacity)*2;
             int i;
             for (i= 0; i < n_buckets; i++) {
@@ -610,7 +610,7 @@ sub print_fn($self) {
                   fprintf(out, "# bucket 0x%lx\\n", i);
                if (table[i]) {
                   ++used;
-                  collision += $treeprint(hashtree, capacity, table[i], 0, out) - 1;
+                  collision += $treeprint(rbhash, capacity, table[i], 0, out) - 1;
                } else
                   fprintf(out, "-\\n");
             }
@@ -629,12 +629,12 @@ sub structcheck_fn($self) {
    $self->generate_once($self->private_impl, $name, sub {
       my $elemdata_t= $self->elemdata_type;
       push $self->public_decl->@* , <<~C;
-         bool $name(pTHX_ void* hashtree, size_t capacity, $elemdata_t elemdata, size_t max_el);
+         bool $name(pTHX_ void* rbhash, size_t capacity, $elemdata_t elemdata, size_t max_el);
          C
       my $code= <<~C;
          // Verify that every filled bucket refers to a valid tree,
          // and that every element can be found.
-         bool $name(pTHX_ void* hashtree, size_t capacity, $elemdata_t elemdata, size_t max_el) {
+         bool $name(pTHX_ void* rbhash, size_t capacity, $elemdata_t elemdata, size_t max_el) {
          C
 
       for (0..$self->max_word_idx) {
@@ -648,33 +648,33 @@ sub structcheck_fn($self) {
          push $self->private_impl->@* , <<~C;
          // Verify that every filled bucket refers to a valid tree,
          // and that every node can be found.
-         static bool $name_with_bitsuffix(pTHX_ $word_t *hashtree, size_t capacity, $elemdata_t elemdata, size_t max_el) {
+         static bool $name_with_bitsuffix(pTHX_ $word_t *rbhash, size_t capacity, $elemdata_t elemdata, size_t max_el) {
             size_t n_buckets= @{[ $self->macro_table_buckets('capacity') ]}, node;
             size_t el_hashcode, i_hashcode;
             int cmp, i, depth, blackcount;
             const char *err_msg;
-            $word_t *bucket, *table= hashtree + (1 + capacity)*2, err_node;
+            $word_t *bucket, *table= rbhash + (1 + capacity)*2, err_node;
             bool success= true;
             for (bucket= table + n_buckets - 1; bucket >= table; bucket--) {
                if (*bucket > max_el) {
                   warn("Bucket %ld refers to element %ld which is greater than max_el %ld", (long)(bucket-table), (long)*bucket, (long)max_el);
                   success= false;
                } else if (*bucket) {
-                  if (!$treecheck(hashtree, max_el, *bucket, 0,
+                  if (!$treecheck(rbhash, max_el, *bucket, 0,
                      NULL, &blackcount, &err_msg, &err_node
                   )) {
-                     $treeprint(hashtree, max_el, *bucket, err_node, stderr);
+                     $treeprint(rbhash, max_el, *bucket, err_node, stderr);
                      warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
                      success= false;
                   }
                }
             }
             // Check properties of sentinel node
-            if (HASHTREE_LEFT(0) || HASHTREE_RIGHT(0)) {
+            if (RBHASH_LEFT(0) || RBHASH_RIGHT(0)) {
                warn("Sentinel node has sub-trees");
                success= false;
             }
-            if (HASHTREE_IS_RED(0)) {
+            if (RBHASH_IS_RED(0)) {
                warn("Sentinel node is red");
                success= false;
             }
@@ -694,7 +694,7 @@ sub structcheck_fn($self) {
                         success= false;
                         break;
                      }
-                     else node= (cmp < 0? HASHTREE_LEFT(node) : HASHTREE_RIGHT(node));
+                     else node= (cmp < 0? RBHASH_LEFT(node) : RBHASH_RIGHT(node));
                   }
                   if (!node) {
                      warn("Element %ld not found in hash table", (long)i);
@@ -706,7 +706,7 @@ sub structcheck_fn($self) {
          C
          $code .= <<~C
             if (capacity <= @{[ sprintf("0x%X", $word_max) ]})
-               return $name_with_bitsuffix(aTHX_ ($word_t*)hashtree, capacity, elemdata, max_el);
+               return $name_with_bitsuffix(aTHX_ ($word_t*)rbhash, capacity, elemdata, max_el);
          C
       }
       $code .= <<~C

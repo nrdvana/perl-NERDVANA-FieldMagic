@@ -1,6 +1,6 @@
 #! /usr/bin/env perl
 use Test2::V0;
-use NERDVANA::Field qw( new_fieldset fieldset_for_package FIELD_TYPE_SV );
+use NERDVANA::FieldMagic qw( new_fieldset fieldset_for_package FIELD_TYPE_SV );
 use Scalar::Util 'weaken';
 
 my $anon_fields= new_fieldset();

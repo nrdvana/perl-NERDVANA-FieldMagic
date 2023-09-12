@@ -156,7 +156,7 @@ static int nf_fieldset_magic_free(pTHX_ SV *sv, MAGIC *mg) {
 }
 #ifdef USE_ITHREADS
 static int nf_fieldset_magic_dup(pTHX_ MAGIC *mg, CLONE_PARAMS *param) {
-   croak("TODO: thread support for NERDVANA::Field");
+   croak("TODO: thread support for NERDVANA::FieldMagic");
    return 0;
 };
 #else
@@ -186,7 +186,7 @@ nf_fieldset_t * nf_fieldset_alloc(pTHX_) {
    // Need a ref in order to call sv_bless
    // Also, causes this object to be mortal
    ref= sv_2mortal(newRV_noinc((SV*)self->wrapper));
-   sv_bless(ref, gv_stashpv("NERDVANA::Field::FieldSet", GV_ADD));
+   sv_bless(ref, gv_stashpv("NERDVANA::FieldMagic::FieldSet", GV_ADD));
    return self;
 }
 
@@ -203,7 +203,7 @@ static int nf_fieldset_pkg_stash_magic_free(pTHX_ SV *sv, MAGIC *mg) {
 }
 #ifdef USE_ITHREADS
 static int nf_fieldset_pkg_stash_magic_dup(pTHX_ MAGIC *mg, CLONE_PARAMS *param) {
-   croak("TODO: thread support for NERDVANA::Field");
+   croak("TODO: thread support for NERDVANA::FieldMagic");
    return 0;
 };
 #else
@@ -747,7 +747,7 @@ void nf_fieldstorage_field_setsv(pTHX_ nf_fieldstorage_t *self, nf_fieldinfo_t *
 \**********************************************************************************************/
 
 /*
-  - nf_fieldset_t structs are owned by NERDVANA::Field::FieldSet objects.
+  - nf_fieldset_t structs are owned by NERDVANA::FieldMagic::FieldSet objects.
   - Package stashes have a magic pointer attached which acts as a strong reference
      to the FieldSet object.  (but is actually a pointer to the nf_fieldset_t)
   - FieldInfo objects are blessed arrayrefs of [ FieldSet, field_index ]
@@ -789,7 +789,7 @@ static int nf_fieldinfo_magic_free(pTHX_ SV *sv, MAGIC *mg) {
 }
 #ifdef USE_ITHREADS
 static int nf_fieldinfo_magic_dup(pTHX_ MAGIC *mg, CLONE_PARAMS *param) {
-   croak("TODO: thread support for NERDVANA::Field");
+   croak("TODO: thread support for NERDVANA::FieldMagic");
    return 0;
 };
 #else
@@ -815,7 +815,7 @@ static SV* nf_fieldinfo_wrap(pTHX_ nf_fieldinfo_t *finfo) {
    #endif
    SvREFCNT_inc(finfo->fieldset->wrapper); // refcnt on fieldset, not fieldinfo
    return sv_bless(newRV_noinc(sv),
-      gv_stashpv("NERDVANA::Field::FieldInfo", GV_ADD));
+      gv_stashpv("NERDVANA::FieldMagic::FieldInfo", GV_ADD));
 }
 
 static nf_fieldinfo_t* nf_fieldinfo_magic_get(pTHX_ SV *obj, int flags) {
@@ -841,7 +841,7 @@ static int nf_fieldstorage_map_magic_free(pTHX_ SV* sv, MAGIC* mg) {
 }
 #ifdef USE_ITHREADS
 static int nf_fieldstorage_map_magic_dup(pTHX_ MAGIC *mg, CLONE_PARAMS *param) {
-   croak("TODO: support ithreads for NERDVANA::Field");
+   croak("TODO: support ithreads for NERDVANA::FieldMagic");
    return 0;
 };
 #else
@@ -879,9 +879,9 @@ static nf_fieldstorage_t* nf_fieldstorage_magic_get(pTHX_ SV *sv, nf_fieldset_t 
 }
 
 /**********************************************************************************************\
-* NERDVANA::Field Public API
+* NERDVANA::FieldMagic Public API
 \**********************************************************************************************/
-MODULE = NERDVANA::Field                  PACKAGE = NERDVANA::Field
+MODULE = NERDVANA::FieldMagic                  PACKAGE = NERDVANA::FieldMagic
 
 void
 import(pkg, ...)
@@ -963,7 +963,7 @@ field_type(sv)
          : &PL_sv_undef;
       XSRETURN(1);
 
-MODULE = NERDVANA::Field                  PACKAGE = NERDVANA::Field::FieldSet
+MODULE = NERDVANA::FieldMagic                  PACKAGE = NERDVANA::FieldMagic::FieldSet
 PROTOTYPES: DISABLE
 
 void
@@ -975,7 +975,7 @@ new(cls)
       self= nf_fieldset_alloc(aTHX_);
       ST(0)= sv_2mortal(newRV_inc((SV*) self->wrapper));
       // Allow it to be blessed as something else
-      if (strcmp(cls, "NERDVANA::Field::FieldSet") != 0)
+      if (strcmp(cls, "NERDVANA::FieldMagic::FieldSet") != 0)
          sv_bless(ST(0), gv_stashpv(cls, GV_ADD));
       XSRETURN(1);
 
@@ -1070,7 +1070,7 @@ field(fs, name)
    OUTPUT:
       RETVAL
 
-MODULE = NERDVANA::Field              PACKAGE = NERDVANA::Field::FieldInfo
+MODULE = NERDVANA::FieldMagic              PACKAGE = NERDVANA::FieldMagic::FieldInfo
 
 nf_fieldset_t*
 fieldset(self)
@@ -1105,7 +1105,7 @@ type(self)
       RETVAL
 
 BOOT:
-   HV* stash= gv_stashpv("NERDVANA::Field", GV_ADD);
+   HV* stash= gv_stashpv("NERDVANA::FieldMagic", GV_ADD);
    /* BEGIN GENERATED ENUM CONSTANTS */
    newCONSTSUB(stash, "FIELD_TYPE_AV", nf_newSVivpv(NF_FIELD_TYPE_AV, "FIELD_TYPE_AV"));
    newCONSTSUB(stash, "FIELD_TYPE_BOOL", nf_newSVivpv(NF_FIELD_TYPE_BOOL, "FIELD_TYPE_BOOL"));

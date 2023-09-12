@@ -1,4 +1,4 @@
-package NERDVANA::Field;
+package NERDVANA::FieldMagic;
 
 # VERSION
 # ABSTRACT: It's Fields All The Way Down
@@ -8,7 +8,7 @@ use warnings;
 use Carp;
 
 require XSLoader;
-XSLoader::load('NERDVANA::Field', $NERDVANA::Field::VERSION);
+XSLoader::load('NERDVANA::FieldMagic', $NERDVANA::FieldMagic::VERSION);
 
 1;
 
@@ -18,7 +18,7 @@ __END__
 
   package Color {
     use v5.36;
-    use NERDVANA::Field qw/ -parent -twigil /;
+    use NERDVANA::FieldMagic qw/ -parent -twigil /;
     field $.r;
     field $.g;
     field $.b;
@@ -28,7 +28,7 @@ __END__
   }
  
   my $c= Color->new(255,255,80);
-  my $fields= NERDVANA::Field::fieldset_for_package('Color');
+  my $fields= NERDVANA::FieldMagic::fieldset_for_package('Color');
   $fields->get_field('r')->set($c, 2);
 
   $fields->add_field('a', 'SCALAR');
@@ -42,7 +42,7 @@ __END__
   
   package Vector {
     use v5.36;
-    use NERDVANA::Field;
+    use NERDVANA::FieldMagic;
     field $x :virtual[0];
     field $y :virtual[1];
     field $z :virtual[2];
@@ -57,7 +57,7 @@ __END__
     }
   }
   my $vec= Vector->new(1,1,1);
-  my $custom_fields= NERDVANA::Field::anonymous_fieldset();
+  my $custom_fields= NERDVANA::FieldMagic::anonymous_fieldset();
   $custom_fields->add_field('test', 'SCALAR')->set($vec, "Example");
 
 =head1 FUNCTIONS
@@ -67,7 +67,7 @@ __END__
   $fieldset = fieldset_for_package("My::Package", $bool_create);
   $fieldset = fieldset_for_package(\%main::My::Package::, $bool_create);
 
-Return a L<NERDVANA::Field::FieldSet> that describes the fields of a named package.
+Return a L<NERDVANA::FieldMagic::FieldSet> that describes the fields of a named package.
 If create is false, the return value will be C<undef> unless fields have been initialized
 for that package.
 
@@ -81,7 +81,7 @@ If the name or number is not valid, this returns C<undef>.
 
 =head2 new_fieldset
 
-Shortcut for L<NERDVANA::Field::FieldSet/new>.
+Shortcut for L<NERDVANA::FieldMagic::FieldSet/new>.
 
 =head2 get_object_fieldsets
 

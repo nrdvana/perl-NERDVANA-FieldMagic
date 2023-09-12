@@ -1,4 +1,4 @@
-package NERDVANA::Field::FieldInfo;
+package NERDVANA::FieldMagic::FieldInfo;
 
 1;
 
@@ -8,7 +8,7 @@ __END__
 
 =head2 fieldset
 
-A reference to the L<NERDVANA::Field::FieldSet> that owns this field.
+A reference to the L<NERDVANA::FieldMagic::FieldSet> that owns this field.
 (FieldInfo objects hold a strong reference to FieldSet)
 
 =head2 field_idx

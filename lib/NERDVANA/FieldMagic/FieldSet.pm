@@ -1,4 +1,4 @@
-package NERDVANA::Field::FieldSet;
+package NERDVANA::FieldMagic::FieldSet;
 
 1;
 
@@ -10,7 +10,7 @@ __END__
 
   $fieldset = NRDVANA::Field::FieldSet->new();
 
-Create a new L<NERDVANA::Field::FieldSet> which is not associated with any package.
+Create a new L<NERDVANA::FieldMagic::FieldSet> which is not associated with any package.
 These variables essentially operate like the "inside-out object" pattern, but much faster.
 
 =head1 ATTRIBUTES

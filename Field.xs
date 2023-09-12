@@ -877,10 +877,73 @@ static nf_fieldstorage_t* nf_fieldstorage_magic_get(pTHX_ SV *sv, nf_fieldset_t 
    return nf_fieldstorage_map_get(aTHX_ (nf_fieldstorage_map_t**) &magic->mg_ptr, fs, flags);
 }
 
+static void hashtree_test(pTHX_) {
+   size_t n, i, sz;
+   nf_fieldstorage_map_t *fsm= NULL;
+   for (n= 127; n < 128/*330*/; n++) {
+      sz= sizeof(nf_fieldstorage_map_t) + sizeof(nf_fieldstorage_t*) * n + NF_HASHTREE_SIZE(n);
+      Renewc(fsm, sz, char, nf_fieldstorage_map_t);
+      Zero(&fsm->el[n], NF_HASHTREE_SIZE(n), char);
+      fsm->capacity= n;
+      for (i= 0; i < n; i++) {
+         Newx(fsm->el[i/*n-1*/], 1, nf_fieldstorage_t);
+         // choose arbitrary pointer values that happen to be a multiple of n_buckets
+         // so that all hash lookups collide.
+         fsm->el[i]->fieldset= (nf_fieldset_t*) (NF_HASHTREE_TABLE_BUCKETS(n)*i);
+      }
+      nf_fieldstorage_map_hashtree_reindex(fsm->el + n, n, fsm->el, 1, n);
+      if (!nf_fieldstorage_map_hashtree_structcheck(fsm->el + n, n, fsm->el, n)) {
+         printf("Failed test for capacity %ld\n", (long)n);
+         if (n < 127) {
+            uint8_t *hashtree= (uint8_t*)(fsm->el + n);
+            printf("%02X %02X", hashtree[0], hashtree[1]);
+            for (i= 1; i <= n; i++) {
+               if (((i-1) & 0x1F) == 0)
+                  printf("\n");
+               printf("%02X %02X  ", hashtree[i*2], hashtree[i*2+1]);
+            }
+            for (i= 0; i < NF_HASHTREE_TABLE_BUCKETS(n); i++) {
+               if ((i & 0x1F) == 0)
+                  printf("\n[ ");
+               printf("%3d ", hashtree[(n+1)*2+i]);
+            }
+            printf("]\n\n");
+            //nf_hashtree_treeprint_7((char*)(fsm->el + n), 1, 0);
+            fflush(stdout);
+         } else {
+            uint16_t *hashtree= (uint16_t*)(fsm->el + n);
+            printf("%04X %04X", hashtree[0], hashtree[1]);
+            for (i= 1; i <= n; i++) {
+               if (((i-1) & 0x1F) == 0)
+                  printf("\n");
+               printf("%04X %04X  ", hashtree[i*2], hashtree[i*2+1]);
+            }
+            for (i= 0; i < NF_HASHTREE_TABLE_BUCKETS(n); i++) {
+               if ((i & 0x1F) == 0)
+                  printf("\n[ ");
+               printf("%3d ", hashtree[(n+1)*2+i]);
+            }
+            printf("]\n\n");
+            //nf_hashtree_treeprint_7((char*)(fsm->el + n), 1, 0);
+            fflush(stdout);
+         }
+      }
+   }
+   for (i=0; i < fsm->capacity; i++)
+      Safefree(fsm->el[i]);
+   Safefree(fsm);
+}
+
 /**********************************************************************************************\
 * NERDVANA::Field Public API
 \**********************************************************************************************/
 MODULE = NERDVANA::Field                  PACKAGE = NERDVANA::Field
+
+void
+hashtree_test()
+   PPCODE:
+      hashtree_test(aTHX_);
+      XSRETURN(0);
 
 void
 import(pkg, ...)

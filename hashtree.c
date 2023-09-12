@@ -11,38 +11,38 @@ size_t nf_fieldset_hashtree_find(void *hashtree, size_t capacity, nf_fieldinfo_t
    if (!n_buckets) return 0;
    key_hashcode= ( (search_key)->name_hashcode );
     if (capacity <= 0x7F) {
-      uint8_t node, *bucket= ((uint8_t *)hashtree) + (1 + capacity + key_hashcode % n_buckets);
+      uint8_t node, *bucket= ((uint8_t *)hashtree) + (1 + capacity)*2 + (key_hashcode % n_buckets);
       if ((node= *bucket)) {
          do {
             el_hashcode= ( (elemdata)[(node)-1]->name_hashcode );
             cmp= (key_hashcode == el_hashcode)? (( sv_cmp((search_key)->name, (elemdata)[(node)-1]->name) ))
                : key_hashcode < el_hashcode? -1 : 1;
             if (!cmp) return node;
-            node= ((uint8_t *)hashtree)[ node*2 + (cmp < 0)? 0 : 1 ] >> 1;
+            node= ((uint8_t *)hashtree)[ node*2 + (cmp < 0? 0 : 1) ] >> 1;
          } while (node);
       }
    }
    else  if (capacity <= 0x7FFF) {
-      uint16_t node, *bucket= ((uint16_t *)hashtree) + (1 + capacity + key_hashcode % n_buckets);
+      uint16_t node, *bucket= ((uint16_t *)hashtree) + (1 + capacity)*2 + (key_hashcode % n_buckets);
       if ((node= *bucket)) {
          do {
             el_hashcode= ( (elemdata)[(node)-1]->name_hashcode );
             cmp= (key_hashcode == el_hashcode)? (( sv_cmp((search_key)->name, (elemdata)[(node)-1]->name) ))
                : key_hashcode < el_hashcode? -1 : 1;
             if (!cmp) return node;
-            node= ((uint16_t *)hashtree)[ node*2 + (cmp < 0)? 0 : 1 ] >> 1;
+            node= ((uint16_t *)hashtree)[ node*2 + (cmp < 0? 0 : 1) ] >> 1;
          } while (node);
       }
    }
    else  if (capacity <= 0x7FFFFFFF) {
-      uint32_t node, *bucket= ((uint32_t *)hashtree) + (1 + capacity + key_hashcode % n_buckets);
+      uint32_t node, *bucket= ((uint32_t *)hashtree) + (1 + capacity)*2 + (key_hashcode % n_buckets);
       if ((node= *bucket)) {
          do {
             el_hashcode= ( (elemdata)[(node)-1]->name_hashcode );
             cmp= (key_hashcode == el_hashcode)? (( sv_cmp((search_key)->name, (elemdata)[(node)-1]->name) ))
                : key_hashcode < el_hashcode? -1 : 1;
             if (!cmp) return node;
-            node= ((uint32_t *)hashtree)[ node*2 + (cmp < 0)? 0 : 1 ] >> 1;
+            node= ((uint32_t *)hashtree)[ node*2 + (cmp < 0? 0 : 1) ] >> 1;
          } while (node);
       }
    }
@@ -52,7 +52,7 @@ size_t nf_fieldset_hashtree_find(void *hashtree, size_t capacity, nf_fieldinfo_t
 #define HASHTREE_RIGHT(n)       (hashtree[(n)*2+1] >> 1)
 #define HASHTREE_IS_RED(n)      (hashtree[(n)*2] & 1)
 #define HASHTREE_SET_LEFT(n,v)  (hashtree[(n)*2]= (hashtree[(n)*2] & 1) | ((v)<<1))
-#define HASHTREE_SET_RIGHT(n,v) (hashtree[(n)*2]= ((v)<<1))
+#define HASHTREE_SET_RIGHT(n,v) (hashtree[(n)*2+1]= ((v)<<1))
 #define HASHTREE_SET_RED(n)     (hashtree[(n)*2] |= 1)
 #define HASHTREE_SET_BLACK(n)   (hashtree[(n)*2]= hashtree[(n)*2] >> 1 << 1)
 // balance a tree from parents[0] upward.  (parents is terminated by a 0 value)
@@ -139,6 +139,101 @@ static void nf_hashtree_rb_balance_7(uint8_t *hashtree, uint8_t *parents) {
       pos= *parents--;
    }
 }
+// Gets called recursively to verify the Red/Black properties of the subtree at 'node'
+// Returns a message describing what was wrong, or NULL on success.
+static bool nf_hashtree_treecheck_7(uint8_t *hashtree, uint8_t max_node, uint8_t node, int depth,
+   int *depth_out, int *blackcount_out,
+   const char **err_out, uint8_t *err_node_out
+) {
+   uint8_t subtree;
+   const char *err= NULL;
+   int i, blackcount[2]= { 0, 0 };
+   if (depth == 0 && HASHTREE_IS_RED(node)) {
+      if (err_out) *err_out= "root node is red";
+      if (err_node_out) *err_node_out= node;
+      return false;
+   }
+   ++depth;
+   if (depth > 16) {
+      if (err_out) *err_out= "mex depth exceeded";
+      if (err_node_out) *err_node_out= node;
+      return false;
+   }
+   if (depth_out && depth > *depth_out)
+      *depth_out= depth;
+   for (i=0; i < 2 && !err; i++) {
+      subtree= i? HASHTREE_RIGHT(node) : HASHTREE_LEFT(node);
+      if (subtree) {
+         if (subtree > max_node) { // out of bounds?
+            if (err_out) *err_out= "node pointer out of bounds";
+            if (err_node_out) *err_node_out= node;
+            return false;
+         }
+         else if (HASHTREE_IS_RED(node) && HASHTREE_IS_RED(subtree)) { // two adjacent reds?
+            if (err_out) *err_out= "adjacent red nodes";
+            if (err_node_out) *err_node_out= node;
+            return false;
+         }
+         else if (!nf_hashtree_treecheck_7(hashtree, max_node, subtree, depth,
+            depth_out, blackcount+i, err_out, err_node_out))
+            return false;
+      }
+   }
+   if (blackcount[0] != blackcount[1]) {
+      if (err_out) *err_out= "subtree black node mismatch";
+      if (err_node_out) *err_node_out= node;
+      return false;
+   }
+   if (blackcount_out)
+      *blackcount_out= blackcount[0] + (HASHTREE_IS_RED(node) ^ 1);
+   return true;
+}
+struct nf_hashtree_treeprint_7_node_path {
+   struct nf_hashtree_treeprint_7_node_path *next;
+   uint8_t node, max_node, mark_node;
+   bool left;
+   int depth;
+};
+static void nf_hashtree_treeprint_7_re(uint8_t *hashtree, struct nf_hashtree_treeprint_7_node_path *root, struct nf_hashtree_treeprint_7_node_path *leaf) {
+   struct nf_hashtree_treeprint_7_node_path path_el= { NULL, 0, 0, 0, false, 0 }, *p;
+   bool cycle= false;
+   if (!leaf->node) return;
+   leaf->next= &path_el;
+   path_el.depth= leaf->depth + 1;
+   for (p= root; p != leaf; p= p->next)
+      if (p->node == leaf->node)
+         cycle= true;
+   if (!cycle && leaf->depth <= 16 && leaf->node <= root->max_node) {
+      path_el.node= HASHTREE_RIGHT(leaf->node);
+      nf_hashtree_treeprint_7_re(hashtree, root, &path_el);
+   }
+   if (root != leaf) {
+      for (p= root; p->next != leaf; p= p->next)
+         fprintf(stderr, "   %c", p->next->left == p->next->next->left? ' ' : '|');
+      fprintf(stderr, "   %c", leaf->left? '`' : ',');
+   }
+   fprintf(stderr, "--%c%c%c %d%s\n",
+      (leaf->node == root->mark_node? '(' : '-'),
+      (leaf->node > root->max_node? '!' : HASHTREE_IS_RED(leaf->node)? 'R':'B'),
+      (leaf->node == root->mark_node? ')' : ' '),
+      leaf->node,
+      cycle? " CYCLE DETECTED"
+         : leaf->depth > 16? " MAX DEPTH EXCEEDED"
+         : leaf->node > root->max_node? " VALUE OUT OF BOUNDS"
+         : ""
+   );
+   if (!cycle && leaf->depth <= 16 && leaf->node <= root->max_node) {
+      path_el.node= HASHTREE_LEFT(leaf->node);
+      path_el.left= true;
+      nf_hashtree_treeprint_7_re(hashtree, root, &path_el);
+   }
+   leaf->next= NULL;
+}
+static void nf_hashtree_treeprint_7(uint8_t *hashtree, uint8_t max_node, uint8_t node, uint8_t mark_node) {
+   struct nf_hashtree_treeprint_7_node_path path_root= { NULL, node, max_node, mark_node, true, 1 };
+   if (!node) fprintf(stderr, "(empty tree)\n");
+   else nf_hashtree_treeprint_7_re(hashtree, &path_root, &path_root);
+}
 // balance a tree from parents[0] upward.  (parents is terminated by a 0 value)
 // nodes is the full array of tree nodes.
 static void nf_hashtree_rb_balance_15(uint16_t *hashtree, uint16_t *parents) {
@@ -222,6 +317,101 @@ static void nf_hashtree_rb_balance_15(uint16_t *hashtree, uint16_t *parents) {
       parents--;
       pos= *parents--;
    }
+}
+// Gets called recursively to verify the Red/Black properties of the subtree at 'node'
+// Returns a message describing what was wrong, or NULL on success.
+static bool nf_hashtree_treecheck_15(uint16_t *hashtree, uint16_t max_node, uint16_t node, int depth,
+   int *depth_out, int *blackcount_out,
+   const char **err_out, uint16_t *err_node_out
+) {
+   uint16_t subtree;
+   const char *err= NULL;
+   int i, blackcount[2]= { 0, 0 };
+   if (depth == 0 && HASHTREE_IS_RED(node)) {
+      if (err_out) *err_out= "root node is red";
+      if (err_node_out) *err_node_out= node;
+      return false;
+   }
+   ++depth;
+   if (depth > 32) {
+      if (err_out) *err_out= "mex depth exceeded";
+      if (err_node_out) *err_node_out= node;
+      return false;
+   }
+   if (depth_out && depth > *depth_out)
+      *depth_out= depth;
+   for (i=0; i < 2 && !err; i++) {
+      subtree= i? HASHTREE_RIGHT(node) : HASHTREE_LEFT(node);
+      if (subtree) {
+         if (subtree > max_node) { // out of bounds?
+            if (err_out) *err_out= "node pointer out of bounds";
+            if (err_node_out) *err_node_out= node;
+            return false;
+         }
+         else if (HASHTREE_IS_RED(node) && HASHTREE_IS_RED(subtree)) { // two adjacent reds?
+            if (err_out) *err_out= "adjacent red nodes";
+            if (err_node_out) *err_node_out= node;
+            return false;
+         }
+         else if (!nf_hashtree_treecheck_15(hashtree, max_node, subtree, depth,
+            depth_out, blackcount+i, err_out, err_node_out))
+            return false;
+      }
+   }
+   if (blackcount[0] != blackcount[1]) {
+      if (err_out) *err_out= "subtree black node mismatch";
+      if (err_node_out) *err_node_out= node;
+      return false;
+   }
+   if (blackcount_out)
+      *blackcount_out= blackcount[0] + (HASHTREE_IS_RED(node) ^ 1);
+   return true;
+}
+struct nf_hashtree_treeprint_15_node_path {
+   struct nf_hashtree_treeprint_15_node_path *next;
+   uint16_t node, max_node, mark_node;
+   bool left;
+   int depth;
+};
+static void nf_hashtree_treeprint_15_re(uint16_t *hashtree, struct nf_hashtree_treeprint_15_node_path *root, struct nf_hashtree_treeprint_15_node_path *leaf) {
+   struct nf_hashtree_treeprint_15_node_path path_el= { NULL, 0, 0, 0, false, 0 }, *p;
+   bool cycle= false;
+   if (!leaf->node) return;
+   leaf->next= &path_el;
+   path_el.depth= leaf->depth + 1;
+   for (p= root; p != leaf; p= p->next)
+      if (p->node == leaf->node)
+         cycle= true;
+   if (!cycle && leaf->depth <= 32 && leaf->node <= root->max_node) {
+      path_el.node= HASHTREE_RIGHT(leaf->node);
+      nf_hashtree_treeprint_15_re(hashtree, root, &path_el);
+   }
+   if (root != leaf) {
+      for (p= root; p->next != leaf; p= p->next)
+         fprintf(stderr, "   %c", p->next->left == p->next->next->left? ' ' : '|');
+      fprintf(stderr, "   %c", leaf->left? '`' : ',');
+   }
+   fprintf(stderr, "--%c%c%c %d%s\n",
+      (leaf->node == root->mark_node? '(' : '-'),
+      (leaf->node > root->max_node? '!' : HASHTREE_IS_RED(leaf->node)? 'R':'B'),
+      (leaf->node == root->mark_node? ')' : ' '),
+      leaf->node,
+      cycle? " CYCLE DETECTED"
+         : leaf->depth > 32? " MAX DEPTH EXCEEDED"
+         : leaf->node > root->max_node? " VALUE OUT OF BOUNDS"
+         : ""
+   );
+   if (!cycle && leaf->depth <= 32 && leaf->node <= root->max_node) {
+      path_el.node= HASHTREE_LEFT(leaf->node);
+      path_el.left= true;
+      nf_hashtree_treeprint_15_re(hashtree, root, &path_el);
+   }
+   leaf->next= NULL;
+}
+static void nf_hashtree_treeprint_15(uint16_t *hashtree, uint16_t max_node, uint16_t node, uint16_t mark_node) {
+   struct nf_hashtree_treeprint_15_node_path path_root= { NULL, node, max_node, mark_node, true, 1 };
+   if (!node) fprintf(stderr, "(empty tree)\n");
+   else nf_hashtree_treeprint_15_re(hashtree, &path_root, &path_root);
 }
 // balance a tree from parents[0] upward.  (parents is terminated by a 0 value)
 // nodes is the full array of tree nodes.
@@ -307,6 +497,101 @@ static void nf_hashtree_rb_balance_31(uint32_t *hashtree, uint32_t *parents) {
       pos= *parents--;
    }
 }
+// Gets called recursively to verify the Red/Black properties of the subtree at 'node'
+// Returns a message describing what was wrong, or NULL on success.
+static bool nf_hashtree_treecheck_31(uint32_t *hashtree, uint32_t max_node, uint32_t node, int depth,
+   int *depth_out, int *blackcount_out,
+   const char **err_out, uint32_t *err_node_out
+) {
+   uint32_t subtree;
+   const char *err= NULL;
+   int i, blackcount[2]= { 0, 0 };
+   if (depth == 0 && HASHTREE_IS_RED(node)) {
+      if (err_out) *err_out= "root node is red";
+      if (err_node_out) *err_node_out= node;
+      return false;
+   }
+   ++depth;
+   if (depth > 64) {
+      if (err_out) *err_out= "mex depth exceeded";
+      if (err_node_out) *err_node_out= node;
+      return false;
+   }
+   if (depth_out && depth > *depth_out)
+      *depth_out= depth;
+   for (i=0; i < 2 && !err; i++) {
+      subtree= i? HASHTREE_RIGHT(node) : HASHTREE_LEFT(node);
+      if (subtree) {
+         if (subtree > max_node) { // out of bounds?
+            if (err_out) *err_out= "node pointer out of bounds";
+            if (err_node_out) *err_node_out= node;
+            return false;
+         }
+         else if (HASHTREE_IS_RED(node) && HASHTREE_IS_RED(subtree)) { // two adjacent reds?
+            if (err_out) *err_out= "adjacent red nodes";
+            if (err_node_out) *err_node_out= node;
+            return false;
+         }
+         else if (!nf_hashtree_treecheck_31(hashtree, max_node, subtree, depth,
+            depth_out, blackcount+i, err_out, err_node_out))
+            return false;
+      }
+   }
+   if (blackcount[0] != blackcount[1]) {
+      if (err_out) *err_out= "subtree black node mismatch";
+      if (err_node_out) *err_node_out= node;
+      return false;
+   }
+   if (blackcount_out)
+      *blackcount_out= blackcount[0] + (HASHTREE_IS_RED(node) ^ 1);
+   return true;
+}
+struct nf_hashtree_treeprint_31_node_path {
+   struct nf_hashtree_treeprint_31_node_path *next;
+   uint32_t node, max_node, mark_node;
+   bool left;
+   int depth;
+};
+static void nf_hashtree_treeprint_31_re(uint32_t *hashtree, struct nf_hashtree_treeprint_31_node_path *root, struct nf_hashtree_treeprint_31_node_path *leaf) {
+   struct nf_hashtree_treeprint_31_node_path path_el= { NULL, 0, 0, 0, false, 0 }, *p;
+   bool cycle= false;
+   if (!leaf->node) return;
+   leaf->next= &path_el;
+   path_el.depth= leaf->depth + 1;
+   for (p= root; p != leaf; p= p->next)
+      if (p->node == leaf->node)
+         cycle= true;
+   if (!cycle && leaf->depth <= 64 && leaf->node <= root->max_node) {
+      path_el.node= HASHTREE_RIGHT(leaf->node);
+      nf_hashtree_treeprint_31_re(hashtree, root, &path_el);
+   }
+   if (root != leaf) {
+      for (p= root; p->next != leaf; p= p->next)
+         fprintf(stderr, "   %c", p->next->left == p->next->next->left? ' ' : '|');
+      fprintf(stderr, "   %c", leaf->left? '`' : ',');
+   }
+   fprintf(stderr, "--%c%c%c %d%s\n",
+      (leaf->node == root->mark_node? '(' : '-'),
+      (leaf->node > root->max_node? '!' : HASHTREE_IS_RED(leaf->node)? 'R':'B'),
+      (leaf->node == root->mark_node? ')' : ' '),
+      leaf->node,
+      cycle? " CYCLE DETECTED"
+         : leaf->depth > 64? " MAX DEPTH EXCEEDED"
+         : leaf->node > root->max_node? " VALUE OUT OF BOUNDS"
+         : ""
+   );
+   if (!cycle && leaf->depth <= 64 && leaf->node <= root->max_node) {
+      path_el.node= HASHTREE_LEFT(leaf->node);
+      path_el.left= true;
+      nf_hashtree_treeprint_31_re(hashtree, root, &path_el);
+   }
+   leaf->next= NULL;
+}
+static void nf_hashtree_treeprint_31(uint32_t *hashtree, uint32_t max_node, uint32_t node, uint32_t mark_node) {
+   struct nf_hashtree_treeprint_31_node_path path_root= { NULL, node, max_node, mark_node, true, 1 };
+   if (!node) fprintf(stderr, "(empty tree)\n");
+   else nf_hashtree_treeprint_31_re(hashtree, &path_root, &path_root);
+}
 bool nf_fieldset_hashtree_reindex(void *hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, size_t el_i, size_t last_i) {
    size_t n_buckets= NF_HASHTREE_TABLE_BUCKETS(capacity);
    size_t el_hashcode, new_hashcode, pos;
@@ -314,10 +599,11 @@ bool nf_fieldset_hashtree_reindex(void *hashtree, size_t capacity, nf_fieldinfo_
    if (el_i < 1 || last_i > capacity || !n_buckets)
       return false;
    if (capacity <= 0x7F) {
-      uint8_t *bucket, node, tree_ref, parents[1+16];
+      uint8_t *bucket, node, tree_ref, parents[1+16], err_node;
+      const char *err_msg;
       for (; el_i <= last_i; el_i++) {
          new_hashcode= ( (elemdata)[(el_i)-1]->name_hashcode );
-         bucket= ((uint8_t *)hashtree) + (1 + capacity + new_hashcode % n_buckets);
+         bucket= ((uint8_t *)hashtree) + (1 + capacity)*2 + new_hashcode % n_buckets;
          if (!(node= *bucket))
             *bucket= el_i;
          else {
@@ -329,7 +615,7 @@ bool nf_fieldset_hashtree_reindex(void *hashtree, size_t capacity, nf_fieldinfo_
                el_hashcode= ( (elemdata)[(node)-1]->name_hashcode );
                cmp= new_hashcode == el_hashcode? (( sv_cmp((elemdata)[(el_i)-1]->name, (elemdata)[(node)-1]->name) ))
                   : new_hashcode < el_hashcode? -1 : 1;
-               tree_ref= node*2 + (cmp < 0)? 0 : 1;
+               tree_ref= node*2 + (cmp < 0? 0 : 1);
                node= ((uint8_t *)hashtree)[tree_ref] >> 1;
             } while (node && pos < 16);
             if (pos > 16) {
@@ -350,14 +636,22 @@ bool nf_fieldset_hashtree_reindex(void *hashtree, size_t capacity, nf_fieldinfo_
                ((uint8_t *)hashtree)[ parents[1]*2 ]= ((uint8_t *)hashtree)[ parents[1]*2 ] >> 1 << 1; 
             }
          }
+         if (!nf_hashtree_treecheck_7(hashtree, el_i, *bucket, 0,
+            NULL, NULL, &err_msg, &err_node
+         )) {
+            nf_hashtree_treeprint_7(hashtree, *bucket, err_node, 0);
+            warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
+            return false;
+         }
       }
       return true;
    }
    if (capacity <= 0x7FFF) {
-      uint16_t *bucket, node, tree_ref, parents[1+32];
+      uint16_t *bucket, node, tree_ref, parents[1+32], err_node;
+      const char *err_msg;
       for (; el_i <= last_i; el_i++) {
          new_hashcode= ( (elemdata)[(el_i)-1]->name_hashcode );
-         bucket= ((uint16_t *)hashtree) + (1 + capacity + new_hashcode % n_buckets);
+         bucket= ((uint16_t *)hashtree) + (1 + capacity)*2 + new_hashcode % n_buckets;
          if (!(node= *bucket))
             *bucket= el_i;
          else {
@@ -369,7 +663,7 @@ bool nf_fieldset_hashtree_reindex(void *hashtree, size_t capacity, nf_fieldinfo_
                el_hashcode= ( (elemdata)[(node)-1]->name_hashcode );
                cmp= new_hashcode == el_hashcode? (( sv_cmp((elemdata)[(el_i)-1]->name, (elemdata)[(node)-1]->name) ))
                   : new_hashcode < el_hashcode? -1 : 1;
-               tree_ref= node*2 + (cmp < 0)? 0 : 1;
+               tree_ref= node*2 + (cmp < 0? 0 : 1);
                node= ((uint16_t *)hashtree)[tree_ref] >> 1;
             } while (node && pos < 32);
             if (pos > 32) {
@@ -390,14 +684,22 @@ bool nf_fieldset_hashtree_reindex(void *hashtree, size_t capacity, nf_fieldinfo_
                ((uint16_t *)hashtree)[ parents[1]*2 ]= ((uint16_t *)hashtree)[ parents[1]*2 ] >> 1 << 1; 
             }
          }
+         if (!nf_hashtree_treecheck_15(hashtree, el_i, *bucket, 0,
+            NULL, NULL, &err_msg, &err_node
+         )) {
+            nf_hashtree_treeprint_15(hashtree, *bucket, err_node, 0);
+            warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
+            return false;
+         }
       }
       return true;
    }
    if (capacity <= 0x7FFFFFFF) {
-      uint32_t *bucket, node, tree_ref, parents[1+64];
+      uint32_t *bucket, node, tree_ref, parents[1+64], err_node;
+      const char *err_msg;
       for (; el_i <= last_i; el_i++) {
          new_hashcode= ( (elemdata)[(el_i)-1]->name_hashcode );
-         bucket= ((uint32_t *)hashtree) + (1 + capacity + new_hashcode % n_buckets);
+         bucket= ((uint32_t *)hashtree) + (1 + capacity)*2 + new_hashcode % n_buckets;
          if (!(node= *bucket))
             *bucket= el_i;
          else {
@@ -409,7 +711,7 @@ bool nf_fieldset_hashtree_reindex(void *hashtree, size_t capacity, nf_fieldinfo_
                el_hashcode= ( (elemdata)[(node)-1]->name_hashcode );
                cmp= new_hashcode == el_hashcode? (( sv_cmp((elemdata)[(el_i)-1]->name, (elemdata)[(node)-1]->name) ))
                   : new_hashcode < el_hashcode? -1 : 1;
-               tree_ref= node*2 + (cmp < 0)? 0 : 1;
+               tree_ref= node*2 + (cmp < 0? 0 : 1);
                node= ((uint32_t *)hashtree)[tree_ref] >> 1;
             } while (node && pos < 64);
             if (pos > 64) {
@@ -430,30 +732,17 @@ bool nf_fieldset_hashtree_reindex(void *hashtree, size_t capacity, nf_fieldinfo_
                ((uint32_t *)hashtree)[ parents[1]*2 ]= ((uint32_t *)hashtree)[ parents[1]*2 ] >> 1 << 1; 
             }
          }
+         if (!nf_hashtree_treecheck_31(hashtree, el_i, *bucket, 0,
+            NULL, NULL, &err_msg, &err_node
+         )) {
+            nf_hashtree_treeprint_31(hashtree, *bucket, err_node, 0);
+            warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
+            return false;
+         }
       }
       return true;
    }
    return false; // happens if capacity is out of bounds
-}
-// Gets called recursively to verify the Red/Black properties of the subtree at 'idx'
-// Returns the number of black nodes in the current subtree, or -1 if there was an error.
-static int nf_hashtree_treecheck_7(uint8_t *hashtree, size_t max_node, size_t node, int *blackcount_out) {
-   uint8_t subtree;
-   int i, depth[2]= { 0, 0 }, blackcount[2]= { 0, 0 };
-   for (i=0; i < 2; i++) {
-      if ((subtree= (hashtree[node*2 + i]>>1))) {
-         if (subtree > max_node) // out of bounds?
-            return -1;
-         if (HASHTREE_IS_RED(node) && HASHTREE_IS_RED(subtree)) // two adjacent reds?
-            return -1;
-         depth[i]= nf_hashtree_treecheck_7(hashtree, max_node, subtree, blackcount+i);
-         if (depth[i] < 0) return -1;
-      }
-   }
-   if (blackcount[0] != blackcount[1])
-      return -1;
-   *blackcount_out= blackcount[0] + (HASHTREE_IS_RED(node) ^ 1);
-   return 1 + (depth[0] > depth[1]? depth[0] : depth[1]);
 }
 // Verify that every filled bucket refers to a valid tree,
 // and that every node can be found.
@@ -461,23 +750,19 @@ static bool nf_fieldset_hashtree_structcheck_7(pTHX_ uint8_t *hashtree, size_t c
    size_t n_buckets= NF_HASHTREE_TABLE_BUCKETS(capacity), node;
    size_t el_hashcode, i_hashcode;
    int cmp, i, depth, blackcount;
-   uint8_t *bucket, *table= hashtree + 1 + capacity;
+   const char *err_msg;
+   uint8_t *bucket, *table= hashtree + (1 + capacity)*2, err_node;
    bool success= true;
    for (bucket= table + n_buckets - 1; bucket >= table; bucket--) {
       if (*bucket > max_el) {
          warn("Bucket %ld refers to element %ld which is greater than max_el %ld", (long)(bucket-table), (long)*bucket, (long)max_el);
          success= false;
       } else if (*bucket) {
-         if (HASHTREE_IS_RED(*bucket)) {
-            warn("Tree at node %ld has red root", (long) *bucket);
-            success= false;
-         }
-         depth= nf_hashtree_treecheck_7(hashtree, max_el, *bucket, &blackcount);
-         if (depth < 0) {
-            warn("Tree at node %ld is corrupt", (long) *bucket);
-            success= false;
-         } else if (depth > 16) {
-            warn("Tree at node %ld exceeds maximum height (%ld > %ld)", (long) *bucket, (long) depth, (long) 16);
+         if (!nf_hashtree_treecheck_7(hashtree, max_el, *bucket, 0,
+            NULL, &blackcount, &err_msg, &err_node
+         )) {
+            nf_hashtree_treeprint_7(hashtree, max_el, *bucket, err_node);
+            warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
             success= false;
          }
       }
@@ -507,10 +792,7 @@ static bool nf_fieldset_hashtree_structcheck_7(pTHX_ uint8_t *hashtree, size_t c
                success= false;
                break;
             }
-            else if (cmp < 0)
-               node= HASHTREE_LEFT(node);
-            else
-               node= HASHTREE_RIGHT(node);
+            else node= (cmp < 0? HASHTREE_LEFT(node) : HASHTREE_RIGHT(node));
          }
          if (!node) {
             warn("Element %ld not found in hash table", (long)i);
@@ -518,26 +800,6 @@ static bool nf_fieldset_hashtree_structcheck_7(pTHX_ uint8_t *hashtree, size_t c
          }
       }
    return success;
-}
-// Gets called recursively to verify the Red/Black properties of the subtree at 'idx'
-// Returns the number of black nodes in the current subtree, or -1 if there was an error.
-static int nf_hashtree_treecheck_15(uint16_t *hashtree, size_t max_node, size_t node, int *blackcount_out) {
-   uint16_t subtree;
-   int i, depth[2]= { 0, 0 }, blackcount[2]= { 0, 0 };
-   for (i=0; i < 2; i++) {
-      if ((subtree= (hashtree[node*2 + i]>>1))) {
-         if (subtree > max_node) // out of bounds?
-            return -1;
-         if (HASHTREE_IS_RED(node) && HASHTREE_IS_RED(subtree)) // two adjacent reds?
-            return -1;
-         depth[i]= nf_hashtree_treecheck_15(hashtree, max_node, subtree, blackcount+i);
-         if (depth[i] < 0) return -1;
-      }
-   }
-   if (blackcount[0] != blackcount[1])
-      return -1;
-   *blackcount_out= blackcount[0] + (HASHTREE_IS_RED(node) ^ 1);
-   return 1 + (depth[0] > depth[1]? depth[0] : depth[1]);
 }
 // Verify that every filled bucket refers to a valid tree,
 // and that every node can be found.
@@ -545,23 +807,19 @@ static bool nf_fieldset_hashtree_structcheck_15(pTHX_ uint16_t *hashtree, size_t
    size_t n_buckets= NF_HASHTREE_TABLE_BUCKETS(capacity), node;
    size_t el_hashcode, i_hashcode;
    int cmp, i, depth, blackcount;
-   uint16_t *bucket, *table= hashtree + 1 + capacity;
+   const char *err_msg;
+   uint16_t *bucket, *table= hashtree + (1 + capacity)*2, err_node;
    bool success= true;
    for (bucket= table + n_buckets - 1; bucket >= table; bucket--) {
       if (*bucket > max_el) {
          warn("Bucket %ld refers to element %ld which is greater than max_el %ld", (long)(bucket-table), (long)*bucket, (long)max_el);
          success= false;
       } else if (*bucket) {
-         if (HASHTREE_IS_RED(*bucket)) {
-            warn("Tree at node %ld has red root", (long) *bucket);
-            success= false;
-         }
-         depth= nf_hashtree_treecheck_15(hashtree, max_el, *bucket, &blackcount);
-         if (depth < 0) {
-            warn("Tree at node %ld is corrupt", (long) *bucket);
-            success= false;
-         } else if (depth > 32) {
-            warn("Tree at node %ld exceeds maximum height (%ld > %ld)", (long) *bucket, (long) depth, (long) 32);
+         if (!nf_hashtree_treecheck_15(hashtree, max_el, *bucket, 0,
+            NULL, &blackcount, &err_msg, &err_node
+         )) {
+            nf_hashtree_treeprint_15(hashtree, max_el, *bucket, err_node);
+            warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
             success= false;
          }
       }
@@ -591,10 +849,7 @@ static bool nf_fieldset_hashtree_structcheck_15(pTHX_ uint16_t *hashtree, size_t
                success= false;
                break;
             }
-            else if (cmp < 0)
-               node= HASHTREE_LEFT(node);
-            else
-               node= HASHTREE_RIGHT(node);
+            else node= (cmp < 0? HASHTREE_LEFT(node) : HASHTREE_RIGHT(node));
          }
          if (!node) {
             warn("Element %ld not found in hash table", (long)i);
@@ -603,49 +858,25 @@ static bool nf_fieldset_hashtree_structcheck_15(pTHX_ uint16_t *hashtree, size_t
       }
    return success;
 }
-// Gets called recursively to verify the Red/Black properties of the subtree at 'idx'
-// Returns the number of black nodes in the current subtree, or -1 if there was an error.
-static int nf_hashtree_treecheck_31(uint32_t *hashtree, size_t max_node, size_t node, int *blackcount_out) {
-   uint32_t subtree;
-   int i, depth[2]= { 0, 0 }, blackcount[2]= { 0, 0 };
-   for (i=0; i < 2; i++) {
-      if ((subtree= (hashtree[node*2 + i]>>1))) {
-         if (subtree > max_node) // out of bounds?
-            return -1;
-         if (HASHTREE_IS_RED(node) && HASHTREE_IS_RED(subtree)) // two adjacent reds?
-            return -1;
-         depth[i]= nf_hashtree_treecheck_31(hashtree, max_node, subtree, blackcount+i);
-         if (depth[i] < 0) return -1;
-      }
-   }
-   if (blackcount[0] != blackcount[1])
-      return -1;
-   *blackcount_out= blackcount[0] + (HASHTREE_IS_RED(node) ^ 1);
-   return 1 + (depth[0] > depth[1]? depth[0] : depth[1]);
-}
 // Verify that every filled bucket refers to a valid tree,
 // and that every node can be found.
 static bool nf_fieldset_hashtree_structcheck_31(pTHX_ uint32_t *hashtree, size_t capacity, nf_fieldinfo_t ** elemdata, size_t max_el) {
    size_t n_buckets= NF_HASHTREE_TABLE_BUCKETS(capacity), node;
    size_t el_hashcode, i_hashcode;
    int cmp, i, depth, blackcount;
-   uint32_t *bucket, *table= hashtree + 1 + capacity;
+   const char *err_msg;
+   uint32_t *bucket, *table= hashtree + (1 + capacity)*2, err_node;
    bool success= true;
    for (bucket= table + n_buckets - 1; bucket >= table; bucket--) {
       if (*bucket > max_el) {
          warn("Bucket %ld refers to element %ld which is greater than max_el %ld", (long)(bucket-table), (long)*bucket, (long)max_el);
          success= false;
       } else if (*bucket) {
-         if (HASHTREE_IS_RED(*bucket)) {
-            warn("Tree at node %ld has red root", (long) *bucket);
-            success= false;
-         }
-         depth= nf_hashtree_treecheck_31(hashtree, max_el, *bucket, &blackcount);
-         if (depth < 0) {
-            warn("Tree at node %ld is corrupt", (long) *bucket);
-            success= false;
-         } else if (depth > 64) {
-            warn("Tree at node %ld exceeds maximum height (%ld > %ld)", (long) *bucket, (long) depth, (long) 64);
+         if (!nf_hashtree_treecheck_31(hashtree, max_el, *bucket, 0,
+            NULL, &blackcount, &err_msg, &err_node
+         )) {
+            nf_hashtree_treeprint_31(hashtree, max_el, *bucket, err_node);
+            warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
             success= false;
          }
       }
@@ -675,10 +906,7 @@ static bool nf_fieldset_hashtree_structcheck_31(pTHX_ uint32_t *hashtree, size_t
                success= false;
                break;
             }
-            else if (cmp < 0)
-               node= HASHTREE_LEFT(node);
-            else
-               node= HASHTREE_RIGHT(node);
+            else node= (cmp < 0? HASHTREE_LEFT(node) : HASHTREE_RIGHT(node));
          }
          if (!node) {
             warn("Element %ld not found in hash table", (long)i);
@@ -707,38 +935,38 @@ size_t nf_fieldstorage_map_hashtree_find(void *hashtree, size_t capacity, nf_fie
    if (!n_buckets) return 0;
    key_hashcode= ( (size_t)(search_key) );
     if (capacity <= 0x7F) {
-      uint8_t node, *bucket= ((uint8_t *)hashtree) + (1 + capacity + key_hashcode % n_buckets);
+      uint8_t node, *bucket= ((uint8_t *)hashtree) + (1 + capacity)*2 + (key_hashcode % n_buckets);
       if ((node= *bucket)) {
          do {
             el_hashcode= ( (size_t)((elemdata)[(node)-1]->fieldset) );
             cmp= (key_hashcode == el_hashcode)? (( (search_key) < ((elemdata)[(node)-1]->fieldset)? -1 : (search_key) == ((elemdata)[(node)-1]->fieldset)? 0 : 1 ))
                : key_hashcode < el_hashcode? -1 : 1;
             if (!cmp) return node;
-            node= ((uint8_t *)hashtree)[ node*2 + (cmp < 0)? 0 : 1 ] >> 1;
+            node= ((uint8_t *)hashtree)[ node*2 + (cmp < 0? 0 : 1) ] >> 1;
          } while (node);
       }
    }
    else  if (capacity <= 0x7FFF) {
-      uint16_t node, *bucket= ((uint16_t *)hashtree) + (1 + capacity + key_hashcode % n_buckets);
+      uint16_t node, *bucket= ((uint16_t *)hashtree) + (1 + capacity)*2 + (key_hashcode % n_buckets);
       if ((node= *bucket)) {
          do {
             el_hashcode= ( (size_t)((elemdata)[(node)-1]->fieldset) );
             cmp= (key_hashcode == el_hashcode)? (( (search_key) < ((elemdata)[(node)-1]->fieldset)? -1 : (search_key) == ((elemdata)[(node)-1]->fieldset)? 0 : 1 ))
                : key_hashcode < el_hashcode? -1 : 1;
             if (!cmp) return node;
-            node= ((uint16_t *)hashtree)[ node*2 + (cmp < 0)? 0 : 1 ] >> 1;
+            node= ((uint16_t *)hashtree)[ node*2 + (cmp < 0? 0 : 1) ] >> 1;
          } while (node);
       }
    }
    else  if (capacity <= 0x7FFFFFFF) {
-      uint32_t node, *bucket= ((uint32_t *)hashtree) + (1 + capacity + key_hashcode % n_buckets);
+      uint32_t node, *bucket= ((uint32_t *)hashtree) + (1 + capacity)*2 + (key_hashcode % n_buckets);
       if ((node= *bucket)) {
          do {
             el_hashcode= ( (size_t)((elemdata)[(node)-1]->fieldset) );
             cmp= (key_hashcode == el_hashcode)? (( (search_key) < ((elemdata)[(node)-1]->fieldset)? -1 : (search_key) == ((elemdata)[(node)-1]->fieldset)? 0 : 1 ))
                : key_hashcode < el_hashcode? -1 : 1;
             if (!cmp) return node;
-            node= ((uint32_t *)hashtree)[ node*2 + (cmp < 0)? 0 : 1 ] >> 1;
+            node= ((uint32_t *)hashtree)[ node*2 + (cmp < 0? 0 : 1) ] >> 1;
          } while (node);
       }
    }
@@ -751,10 +979,11 @@ bool nf_fieldstorage_map_hashtree_reindex(void *hashtree, size_t capacity, nf_fi
    if (el_i < 1 || last_i > capacity || !n_buckets)
       return false;
    if (capacity <= 0x7F) {
-      uint8_t *bucket, node, tree_ref, parents[1+16];
+      uint8_t *bucket, node, tree_ref, parents[1+16], err_node;
+      const char *err_msg;
       for (; el_i <= last_i; el_i++) {
          new_hashcode= ( (size_t)((elemdata)[(el_i)-1]->fieldset) );
-         bucket= ((uint8_t *)hashtree) + (1 + capacity + new_hashcode % n_buckets);
+         bucket= ((uint8_t *)hashtree) + (1 + capacity)*2 + new_hashcode % n_buckets;
          if (!(node= *bucket))
             *bucket= el_i;
          else {
@@ -766,7 +995,7 @@ bool nf_fieldstorage_map_hashtree_reindex(void *hashtree, size_t capacity, nf_fi
                el_hashcode= ( (size_t)((elemdata)[(node)-1]->fieldset) );
                cmp= new_hashcode == el_hashcode? (( ((elemdata)[(el_i)-1]->fieldset) < ((elemdata)[(node)-1]->fieldset)? -1 : ((elemdata)[(el_i)-1]->fieldset) == ((elemdata)[(node)-1]->fieldset)? 0 : 1 ))
                   : new_hashcode < el_hashcode? -1 : 1;
-               tree_ref= node*2 + (cmp < 0)? 0 : 1;
+               tree_ref= node*2 + (cmp < 0? 0 : 1);
                node= ((uint8_t *)hashtree)[tree_ref] >> 1;
             } while (node && pos < 16);
             if (pos > 16) {
@@ -787,14 +1016,22 @@ bool nf_fieldstorage_map_hashtree_reindex(void *hashtree, size_t capacity, nf_fi
                ((uint8_t *)hashtree)[ parents[1]*2 ]= ((uint8_t *)hashtree)[ parents[1]*2 ] >> 1 << 1; 
             }
          }
+         if (!nf_hashtree_treecheck_7(hashtree, el_i, *bucket, 0,
+            NULL, NULL, &err_msg, &err_node
+         )) {
+            nf_hashtree_treeprint_7(hashtree, *bucket, err_node, 0);
+            warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
+            return false;
+         }
       }
       return true;
    }
    if (capacity <= 0x7FFF) {
-      uint16_t *bucket, node, tree_ref, parents[1+32];
+      uint16_t *bucket, node, tree_ref, parents[1+32], err_node;
+      const char *err_msg;
       for (; el_i <= last_i; el_i++) {
          new_hashcode= ( (size_t)((elemdata)[(el_i)-1]->fieldset) );
-         bucket= ((uint16_t *)hashtree) + (1 + capacity + new_hashcode % n_buckets);
+         bucket= ((uint16_t *)hashtree) + (1 + capacity)*2 + new_hashcode % n_buckets;
          if (!(node= *bucket))
             *bucket= el_i;
          else {
@@ -806,7 +1043,7 @@ bool nf_fieldstorage_map_hashtree_reindex(void *hashtree, size_t capacity, nf_fi
                el_hashcode= ( (size_t)((elemdata)[(node)-1]->fieldset) );
                cmp= new_hashcode == el_hashcode? (( ((elemdata)[(el_i)-1]->fieldset) < ((elemdata)[(node)-1]->fieldset)? -1 : ((elemdata)[(el_i)-1]->fieldset) == ((elemdata)[(node)-1]->fieldset)? 0 : 1 ))
                   : new_hashcode < el_hashcode? -1 : 1;
-               tree_ref= node*2 + (cmp < 0)? 0 : 1;
+               tree_ref= node*2 + (cmp < 0? 0 : 1);
                node= ((uint16_t *)hashtree)[tree_ref] >> 1;
             } while (node && pos < 32);
             if (pos > 32) {
@@ -827,14 +1064,22 @@ bool nf_fieldstorage_map_hashtree_reindex(void *hashtree, size_t capacity, nf_fi
                ((uint16_t *)hashtree)[ parents[1]*2 ]= ((uint16_t *)hashtree)[ parents[1]*2 ] >> 1 << 1; 
             }
          }
+         if (!nf_hashtree_treecheck_15(hashtree, el_i, *bucket, 0,
+            NULL, NULL, &err_msg, &err_node
+         )) {
+            nf_hashtree_treeprint_15(hashtree, *bucket, err_node, 0);
+            warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
+            return false;
+         }
       }
       return true;
    }
    if (capacity <= 0x7FFFFFFF) {
-      uint32_t *bucket, node, tree_ref, parents[1+64];
+      uint32_t *bucket, node, tree_ref, parents[1+64], err_node;
+      const char *err_msg;
       for (; el_i <= last_i; el_i++) {
          new_hashcode= ( (size_t)((elemdata)[(el_i)-1]->fieldset) );
-         bucket= ((uint32_t *)hashtree) + (1 + capacity + new_hashcode % n_buckets);
+         bucket= ((uint32_t *)hashtree) + (1 + capacity)*2 + new_hashcode % n_buckets;
          if (!(node= *bucket))
             *bucket= el_i;
          else {
@@ -846,7 +1091,7 @@ bool nf_fieldstorage_map_hashtree_reindex(void *hashtree, size_t capacity, nf_fi
                el_hashcode= ( (size_t)((elemdata)[(node)-1]->fieldset) );
                cmp= new_hashcode == el_hashcode? (( ((elemdata)[(el_i)-1]->fieldset) < ((elemdata)[(node)-1]->fieldset)? -1 : ((elemdata)[(el_i)-1]->fieldset) == ((elemdata)[(node)-1]->fieldset)? 0 : 1 ))
                   : new_hashcode < el_hashcode? -1 : 1;
-               tree_ref= node*2 + (cmp < 0)? 0 : 1;
+               tree_ref= node*2 + (cmp < 0? 0 : 1);
                node= ((uint32_t *)hashtree)[tree_ref] >> 1;
             } while (node && pos < 64);
             if (pos > 64) {
@@ -867,6 +1112,13 @@ bool nf_fieldstorage_map_hashtree_reindex(void *hashtree, size_t capacity, nf_fi
                ((uint32_t *)hashtree)[ parents[1]*2 ]= ((uint32_t *)hashtree)[ parents[1]*2 ] >> 1 << 1; 
             }
          }
+         if (!nf_hashtree_treecheck_31(hashtree, el_i, *bucket, 0,
+            NULL, NULL, &err_msg, &err_node
+         )) {
+            nf_hashtree_treeprint_31(hashtree, *bucket, err_node, 0);
+            warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
+            return false;
+         }
       }
       return true;
    }
@@ -878,23 +1130,19 @@ static bool nf_fieldstorage_map_hashtree_structcheck_7(pTHX_ uint8_t *hashtree, 
    size_t n_buckets= NF_HASHTREE_TABLE_BUCKETS(capacity), node;
    size_t el_hashcode, i_hashcode;
    int cmp, i, depth, blackcount;
-   uint8_t *bucket, *table= hashtree + 1 + capacity;
+   const char *err_msg;
+   uint8_t *bucket, *table= hashtree + (1 + capacity)*2, err_node;
    bool success= true;
    for (bucket= table + n_buckets - 1; bucket >= table; bucket--) {
       if (*bucket > max_el) {
          warn("Bucket %ld refers to element %ld which is greater than max_el %ld", (long)(bucket-table), (long)*bucket, (long)max_el);
          success= false;
       } else if (*bucket) {
-         if (HASHTREE_IS_RED(*bucket)) {
-            warn("Tree at node %ld has red root", (long) *bucket);
-            success= false;
-         }
-         depth= nf_hashtree_treecheck_7(hashtree, max_el, *bucket, &blackcount);
-         if (depth < 0) {
-            warn("Tree at node %ld is corrupt", (long) *bucket);
-            success= false;
-         } else if (depth > 16) {
-            warn("Tree at node %ld exceeds maximum height (%ld > %ld)", (long) *bucket, (long) depth, (long) 16);
+         if (!nf_hashtree_treecheck_7(hashtree, max_el, *bucket, 0,
+            NULL, &blackcount, &err_msg, &err_node
+         )) {
+            nf_hashtree_treeprint_7(hashtree, max_el, *bucket, err_node);
+            warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
             success= false;
          }
       }
@@ -924,10 +1172,7 @@ static bool nf_fieldstorage_map_hashtree_structcheck_7(pTHX_ uint8_t *hashtree, 
                success= false;
                break;
             }
-            else if (cmp < 0)
-               node= HASHTREE_LEFT(node);
-            else
-               node= HASHTREE_RIGHT(node);
+            else node= (cmp < 0? HASHTREE_LEFT(node) : HASHTREE_RIGHT(node));
          }
          if (!node) {
             warn("Element %ld not found in hash table", (long)i);
@@ -942,23 +1187,19 @@ static bool nf_fieldstorage_map_hashtree_structcheck_15(pTHX_ uint16_t *hashtree
    size_t n_buckets= NF_HASHTREE_TABLE_BUCKETS(capacity), node;
    size_t el_hashcode, i_hashcode;
    int cmp, i, depth, blackcount;
-   uint16_t *bucket, *table= hashtree + 1 + capacity;
+   const char *err_msg;
+   uint16_t *bucket, *table= hashtree + (1 + capacity)*2, err_node;
    bool success= true;
    for (bucket= table + n_buckets - 1; bucket >= table; bucket--) {
       if (*bucket > max_el) {
          warn("Bucket %ld refers to element %ld which is greater than max_el %ld", (long)(bucket-table), (long)*bucket, (long)max_el);
          success= false;
       } else if (*bucket) {
-         if (HASHTREE_IS_RED(*bucket)) {
-            warn("Tree at node %ld has red root", (long) *bucket);
-            success= false;
-         }
-         depth= nf_hashtree_treecheck_15(hashtree, max_el, *bucket, &blackcount);
-         if (depth < 0) {
-            warn("Tree at node %ld is corrupt", (long) *bucket);
-            success= false;
-         } else if (depth > 32) {
-            warn("Tree at node %ld exceeds maximum height (%ld > %ld)", (long) *bucket, (long) depth, (long) 32);
+         if (!nf_hashtree_treecheck_15(hashtree, max_el, *bucket, 0,
+            NULL, &blackcount, &err_msg, &err_node
+         )) {
+            nf_hashtree_treeprint_15(hashtree, max_el, *bucket, err_node);
+            warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
             success= false;
          }
       }
@@ -988,10 +1229,7 @@ static bool nf_fieldstorage_map_hashtree_structcheck_15(pTHX_ uint16_t *hashtree
                success= false;
                break;
             }
-            else if (cmp < 0)
-               node= HASHTREE_LEFT(node);
-            else
-               node= HASHTREE_RIGHT(node);
+            else node= (cmp < 0? HASHTREE_LEFT(node) : HASHTREE_RIGHT(node));
          }
          if (!node) {
             warn("Element %ld not found in hash table", (long)i);
@@ -1006,23 +1244,19 @@ static bool nf_fieldstorage_map_hashtree_structcheck_31(pTHX_ uint32_t *hashtree
    size_t n_buckets= NF_HASHTREE_TABLE_BUCKETS(capacity), node;
    size_t el_hashcode, i_hashcode;
    int cmp, i, depth, blackcount;
-   uint32_t *bucket, *table= hashtree + 1 + capacity;
+   const char *err_msg;
+   uint32_t *bucket, *table= hashtree + (1 + capacity)*2, err_node;
    bool success= true;
    for (bucket= table + n_buckets - 1; bucket >= table; bucket--) {
       if (*bucket > max_el) {
          warn("Bucket %ld refers to element %ld which is greater than max_el %ld", (long)(bucket-table), (long)*bucket, (long)max_el);
          success= false;
       } else if (*bucket) {
-         if (HASHTREE_IS_RED(*bucket)) {
-            warn("Tree at node %ld has red root", (long) *bucket);
-            success= false;
-         }
-         depth= nf_hashtree_treecheck_31(hashtree, max_el, *bucket, &blackcount);
-         if (depth < 0) {
-            warn("Tree at node %ld is corrupt", (long) *bucket);
-            success= false;
-         } else if (depth > 64) {
-            warn("Tree at node %ld exceeds maximum height (%ld > %ld)", (long) *bucket, (long) depth, (long) 64);
+         if (!nf_hashtree_treecheck_31(hashtree, max_el, *bucket, 0,
+            NULL, &blackcount, &err_msg, &err_node
+         )) {
+            nf_hashtree_treeprint_31(hashtree, max_el, *bucket, err_node);
+            warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
             success= false;
          }
       }
@@ -1052,10 +1286,7 @@ static bool nf_fieldstorage_map_hashtree_structcheck_31(pTHX_ uint32_t *hashtree
                success= false;
                break;
             }
-            else if (cmp < 0)
-               node= HASHTREE_LEFT(node);
-            else
-               node= HASHTREE_RIGHT(node);
+            else node= (cmp < 0? HASHTREE_LEFT(node) : HASHTREE_RIGHT(node));
          }
          if (!node) {
             warn("Element %ld not found in hash table", (long)i);

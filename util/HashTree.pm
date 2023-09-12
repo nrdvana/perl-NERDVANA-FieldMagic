@@ -242,14 +242,14 @@ sub find_fn($self) {
          my $word_max= $self->word_max_capacity->[$_];
          $code .= <<~C
             @{[ $_? 'else ':'' ]} if (capacity <= @{[ sprintf("0x%X", $word_max) ]}) {
-               $word_t node, *bucket= (($word_t *)hashtree) + (1 + capacity + key_hashcode % n_buckets);
+               $word_t node, *bucket= (($word_t *)hashtree) + (1 + capacity)*2 + (key_hashcode % n_buckets);
                if ((node= *bucket)) {
                   do {
                      el_hashcode= @{[ $self->macro_elem_hashcode('elemdata', 'node') ]};
                      cmp= (key_hashcode == el_hashcode)? (@{[ $self->macro_cmp_key_elem('search_key', 'elemdata', 'node') ]})
                         : key_hashcode < el_hashcode? -1 : 1;
                      if (!cmp) return node;
-                     node= (($word_t *)hashtree)[ node*2 + (cmp < 0)? 0 : 1 ] >> 1;
+                     node= (($word_t *)hashtree)[ node*2 + (cmp < 0? 0 : 1) ] >> 1;
                   } while (node);
                }
             }
@@ -282,12 +282,15 @@ sub reindex_fn($self) {
          my $word_max= $self->word_max_capacity->[$_];
          my $max_tree_height= $self->word_max_tree_height->[$_];
          my $balance_fn= $self->balance_fn($_);
+         my $treecheck= $self->treecheck_fn($_);
+         my $treeprint= $self->treeprint_fn($_);
          $code .= <<~C
             if (capacity <= @{[ sprintf("0x%X", $word_max) ]}) {
-               $word_t *bucket, node, tree_ref, parents[1+$max_tree_height];
+               $word_t *bucket, node, tree_ref, parents[1+$max_tree_height], err_node;
+               const char *err_msg;
                for (; el_i <= last_i; el_i++) {
                   new_hashcode= @{[ $self->macro_elem_hashcode('elemdata', 'el_i') ]};
-                  bucket= (($word_t *)hashtree) + (1 + capacity + new_hashcode % n_buckets);
+                  bucket= (($word_t *)hashtree) + (1 + capacity)*2 + new_hashcode % n_buckets;
                   if (!(node= *bucket))
                      *bucket= el_i;
                   else {
@@ -299,7 +302,7 @@ sub reindex_fn($self) {
                         el_hashcode= @{[ $self->macro_elem_hashcode('elemdata', 'node') ]};
                         cmp= new_hashcode == el_hashcode? (@{[ $self->macro_cmp_elem_elem('elemdata', 'el_i', 'node') ]})
                            : new_hashcode < el_hashcode? -1 : 1;
-                        tree_ref= node*2 + (cmp < 0)? 0 : 1;
+                        tree_ref= node*2 + (cmp < 0? 0 : 1);
                         node= (($word_t *)hashtree)[tree_ref] >> 1;
                      } while (node && pos < $max_tree_height);
                      if (pos > $max_tree_height) {
@@ -319,6 +322,13 @@ sub reindex_fn($self) {
                         // tree root is always black
                         (($word_t *)hashtree)[ parents[1]*2 ]= (($word_t *)hashtree)[ parents[1]*2 ] >> 1 << 1; 
                      }
+                  }
+                  if (!$treecheck(hashtree, el_i, *bucket, 0,
+                     NULL, NULL, &err_msg, &err_node
+                  )) {
+                     $treeprint(hashtree, *bucket, err_node, 0);
+                     warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
+                     return false;
                   }
                }
                return true;
@@ -342,7 +352,7 @@ sub balance_fn($self, $word_idx) {
          #define HASHTREE_RIGHT(n)       (hashtree[(n)*2+1] >> 1)
          #define HASHTREE_IS_RED(n)      (hashtree[(n)*2] & 1)
          #define HASHTREE_SET_LEFT(n,v)  (hashtree[(n)*2]= (hashtree[(n)*2] & 1) | ((v)<<1))
-         #define HASHTREE_SET_RIGHT(n,v) (hashtree[(n)*2]= ((v)<<1))
+         #define HASHTREE_SET_RIGHT(n,v) (hashtree[(n)*2+1]= ((v)<<1))
          #define HASHTREE_SET_RED(n)     (hashtree[(n)*2] |= 1)
          #define HASHTREE_SET_BLACK(n)   (hashtree[(n)*2]= hashtree[(n)*2] >> 1 << 1)
          C
@@ -439,6 +449,125 @@ sub balance_fn($self, $word_idx) {
    });
 }
 
+sub treecheck_fn($self, $word_idx) {
+   my $bits= ((8 << $word_idx)-1);
+   my $name= $self->common_namespace.'_treecheck_'.$bits;
+   $self->generate_once($self->private_impl, $name, sub {
+      my $word_t= $self->word_types->[$word_idx];
+      my $word_max= $self->word_max_capacity->[$word_idx];
+      my $max_tree_height= $self->word_max_tree_height->[$word_idx];
+      <<~C
+      // Gets called recursively to verify the Red/Black properties of the subtree at 'node'
+      // Returns a message describing what was wrong, or NULL on success.
+      static bool $name($word_t *hashtree, $word_t max_node, $word_t node, int depth,
+         int *depth_out, int *blackcount_out,
+         const char **err_out, $word_t *err_node_out
+      ) {
+         $word_t subtree;
+         const char *err= NULL;
+         int i, blackcount[2]= { 0, 0 };
+         if (depth == 0 && HASHTREE_IS_RED(node)) {
+            if (err_out) *err_out= "root node is red";
+            if (err_node_out) *err_node_out= node;
+            return false;
+         }
+         ++depth;
+         if (depth > $max_tree_height) {
+            if (err_out) *err_out= "mex depth exceeded";
+            if (err_node_out) *err_node_out= node;
+            return false;
+         }
+         if (depth_out && depth > *depth_out)
+            *depth_out= depth;
+         for (i=0; i < 2 && !err; i++) {
+            subtree= i? HASHTREE_RIGHT(node) : HASHTREE_LEFT(node);
+            if (subtree) {
+               if (subtree > max_node) { // out of bounds?
+                  if (err_out) *err_out= "node pointer out of bounds";
+                  if (err_node_out) *err_node_out= node;
+                  return false;
+               }
+               else if (HASHTREE_IS_RED(node) && HASHTREE_IS_RED(subtree)) { // two adjacent reds?
+                  if (err_out) *err_out= "adjacent red nodes";
+                  if (err_node_out) *err_node_out= node;
+                  return false;
+               }
+               else if (!$name(hashtree, max_node, subtree, depth,
+                  depth_out, blackcount+i, err_out, err_node_out))
+                  return false;
+            }
+         }
+         if (blackcount[0] != blackcount[1]) {
+            if (err_out) *err_out= "subtree black node mismatch";
+            if (err_node_out) *err_node_out= node;
+            return false;
+         }
+         if (blackcount_out)
+            *blackcount_out= blackcount[0] + (HASHTREE_IS_RED(node) ^ 1);
+         return true;
+      }
+      C
+   });
+}
+
+sub treeprint_fn($self, $word_idx) {
+   my $bits= ((8 << $word_idx)-1);
+   my $name= $self->common_namespace.'_treeprint_'.$bits;
+   $self->generate_once($self->private_impl, $name, sub {
+      my $word_t= $self->word_types->[$word_idx];
+      my $word_max= $self->word_max_capacity->[$word_idx];
+      my $max_tree_height= $self->word_max_tree_height->[$word_idx];
+      <<~C
+      struct ${name}_node_path {
+         struct ${name}_node_path *next;
+         $word_t node, max_node, mark_node;
+         bool left;
+         int depth;
+      };
+      static void ${name}_re($word_t *hashtree, struct ${name}_node_path *root, struct ${name}_node_path *leaf) {
+         struct ${name}_node_path path_el= { NULL, 0, 0, 0, false, 0 }, *p;
+         bool cycle= false;
+         if (!leaf->node) return;
+         leaf->next= &path_el;
+         path_el.depth= leaf->depth + 1;
+         for (p= root; p != leaf; p= p->next)
+            if (p->node == leaf->node)
+               cycle= true;
+         if (!cycle && leaf->depth <= $max_tree_height && leaf->node <= root->max_node) {
+            path_el.node= HASHTREE_RIGHT(leaf->node);
+            ${name}_re(hashtree, root, &path_el);
+         }
+         if (root != leaf) {
+            for (p= root; p->next != leaf; p= p->next)
+               fprintf(stderr, "   %c", p->next->left == p->next->next->left? ' ' : '|');
+            fprintf(stderr, "   %c", leaf->left? '\`' : ',');
+         }
+         fprintf(stderr, "--%c%c%c %d%s\\n",
+            (leaf->node == root->mark_node? '(' : '-'),
+            (leaf->node > root->max_node? '!' : HASHTREE_IS_RED(leaf->node)? 'R':'B'),
+            (leaf->node == root->mark_node? ')' : ' '),
+            leaf->node,
+            cycle? " CYCLE DETECTED"
+               : leaf->depth > $max_tree_height? " MAX DEPTH EXCEEDED"
+               : leaf->node > root->max_node? " VALUE OUT OF BOUNDS"
+               : ""
+         );
+         if (!cycle && leaf->depth <= $max_tree_height && leaf->node <= root->max_node) {
+            path_el.node= HASHTREE_LEFT(leaf->node);
+            path_el.left= true;
+            ${name}_re(hashtree, root, &path_el);
+         }
+         leaf->next= NULL;
+      }
+      static void $name($word_t *hashtree, $word_t max_node, $word_t node, $word_t mark_node) {
+         struct ${name}_node_path path_root= { NULL, node, max_node, mark_node, true, 1 };
+         if (!node) fprintf(stderr, "(empty tree)\\n");
+         else ${name}_re(hashtree, &path_root, &path_root);
+      }
+      C
+   });
+}
+
 sub structcheck_fn($self) {
    my $name= $self->namespace . "_structcheck";
    $self->generate_once($self->private_impl, $name, sub {
@@ -457,30 +586,8 @@ sub structcheck_fn($self) {
          my $word_t= $self->word_types->[$_];
          my $word_max= $self->word_max_capacity->[$_];
          my $max_tree_height= $self->word_max_tree_height->[$_];
-         my $treecheck= $self->common_namespace.'_treecheck_'.$bits;
-         $self->generate_once($self->private_impl, $treecheck, sub { <<~C });
-         // Gets called recursively to verify the Red/Black properties of the subtree at 'idx'
-         // Returns the number of black nodes in the current subtree, or -1 if there was an error.
-         static int $treecheck($word_t *hashtree, size_t max_node, size_t node, int *blackcount_out) {
-            $word_t subtree;
-            int i, depth[2]= { 0, 0 }, blackcount[2]= { 0, 0 };
-            for (i=0; i < 2; i++) {
-               if ((subtree= (hashtree[node*2 + i]>>1))) {
-                  if (subtree > max_node) // out of bounds?
-                     return -1;
-                  if (HASHTREE_IS_RED(node) && HASHTREE_IS_RED(subtree)) // two adjacent reds?
-                     return -1;
-                  depth[i]= $treecheck(hashtree, max_node, subtree, blackcount+i);
-                  if (depth[i] < 0) return -1;
-               }
-            }
-            if (blackcount[0] != blackcount[1])
-               return -1;
-            *blackcount_out= blackcount[0] + (HASHTREE_IS_RED(node) ^ 1);
-            return 1 + (depth[0] > depth[1]? depth[0] : depth[1]);
-         }
-         C
-         
+         my $treecheck= $self->treecheck_fn($_);
+         my $treeprint= $self->treeprint_fn($_);
          my $name_with_bitsuffix= $name.'_'.$bits;
          push $self->private_impl->@* , <<~C;
          // Verify that every filled bucket refers to a valid tree,
@@ -489,23 +596,19 @@ sub structcheck_fn($self) {
             size_t n_buckets= @{[ $self->macro_table_buckets('capacity') ]}, node;
             size_t el_hashcode, i_hashcode;
             int cmp, i, depth, blackcount;
-            $word_t *bucket, *table= hashtree + 1 + capacity;
+            const char *err_msg;
+            $word_t *bucket, *table= hashtree + (1 + capacity)*2, err_node;
             bool success= true;
             for (bucket= table + n_buckets - 1; bucket >= table; bucket--) {
                if (*bucket > max_el) {
                   warn("Bucket %ld refers to element %ld which is greater than max_el %ld", (long)(bucket-table), (long)*bucket, (long)max_el);
                   success= false;
                } else if (*bucket) {
-                  if (HASHTREE_IS_RED(*bucket)) {
-                     warn("Tree at node %ld has red root", (long) *bucket);
-                     success= false;
-                  }
-                  depth= $treecheck(hashtree, max_el, *bucket, &blackcount);
-                  if (depth < 0) {
-                     warn("Tree at node %ld is corrupt", (long) *bucket);
-                     success= false;
-                  } else if (depth > $max_tree_height) {
-                     warn("Tree at node %ld exceeds maximum height (%ld > %ld)", (long) *bucket, (long) depth, (long) $max_tree_height);
+                  if (!$treecheck(hashtree, max_el, *bucket, 0,
+                     NULL, &blackcount, &err_msg, &err_node
+                  )) {
+                     $treeprint(hashtree, max_el, *bucket, err_node);
+                     warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
                      success= false;
                   }
                }
@@ -535,10 +638,7 @@ sub structcheck_fn($self) {
                         success= false;
                         break;
                      }
-                     else if (cmp < 0)
-                        node= HASHTREE_LEFT(node);
-                     else
-                        node= HASHTREE_RIGHT(node);
+                     else node= (cmp < 0? HASHTREE_LEFT(node) : HASHTREE_RIGHT(node));
                   }
                   if (!node) {
                      warn("Element %ld not found in hash table", (long)i);

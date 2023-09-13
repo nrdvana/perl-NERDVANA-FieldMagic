@@ -9,10 +9,6 @@
 #include "fm_fieldset.c"
 #include "fm_fieldstorage.c"
 
-/**********************************************************************************************\
-* This code sets/gets the XS Magic on objects
-\**********************************************************************************************/
-
 /*
   - fm_fieldset_t structs are owned by NERDVANA::FieldMagic::FieldSet objects.
   - Package stashes have a magic pointer attached which acts as a strong reference
@@ -144,6 +140,13 @@ static fm_fieldstorage_t* fm_fieldstorage_magic_get(pTHX_ SV *sv, fm_fieldset_t 
    }
    return fm_fieldstorage_map_get(aTHX_ (fm_fieldstorage_map_t**) &magic->mg_ptr, fs, flags);
 }
+
+void fm_install_xs_accessor(pTHX_ SV *name, fm_fieldinfo_t *field, int flags) {
+   
+}
+
+
+
 
 /**********************************************************************************************\
 * NERDVANA::FieldMagic Public API
@@ -423,6 +426,15 @@ set_value(self, obj, val)
       // TODO: handle arrayrefs and hashrefs when assigning arrays and hashes
       fm_fieldstorage_field_assign(aTHX_ stor, self, val);
       XSRETURN(0);
+
+void
+install_xs_accessor(self, methodname, ...)
+   fm_fieldinfo_t *self
+   SV *methodname
+   INIT:
+      int flags= 0;
+   PPCODE:
+      fm_install_xs_accessor(methodname, self, flags);
 
 BOOT:
    HV* stash= gv_stashpv("NERDVANA::FieldMagic", GV_ADD);

@@ -5,15 +5,15 @@ use lib $FindBin::RealBin;
 use RBHash;
 
 my $htgen= RBHash->new(
-   namespace => 'nf_rbhash',
-   common_namespace => 'nf_rbhash',
+   namespace => 'fm_rbhash',
+   common_namespace => 'fm_rbhash',
 );
 $htgen->macro_rbhash_size('capacity');
 for (
    $htgen->override(
-      namespace     => 'nf_fieldset_rbhash',
-      elemdata_type => 'nf_fieldinfo_t **',
-      key_type      => 'nf_fieldinfo_key_t *',
+      namespace     => 'fm_fieldset_rbhash',
+      elemdata_type => 'fm_fieldinfo_t **',
+      key_type      => 'fm_fieldinfo_key_t *',
       macro_elem_hashcode => sub($self, $eldata, $el) {
          "( ($eldata)[($el)-1]->name_hashcode )"
       },
@@ -28,9 +28,9 @@ for (
       }
    ),
    $htgen->override(
-      namespace     => 'nf_fieldstorage_map_rbhash',
-      elemdata_type => 'nf_fieldstorage_t **',
-      key_type      => 'nf_fieldset_t *',
+      namespace     => 'fm_fieldstorage_map_rbhash',
+      elemdata_type => 'fm_fieldstorage_t **',
+      key_type      => 'fm_fieldset_t *',
       macro_elem_hashcode => sub($self, $eldata, $el) {
          "( (size_t)(($eldata)[($el)-1]->fieldset) )"
       },
@@ -50,5 +50,5 @@ for (
    $_->structcheck_fn;
    $_->print_fn;
 }
-$htgen->patch_header("$FindBin::RealBin/../Field.xs");
+$htgen->patch_header("$FindBin::RealBin/../FieldMagic.h");
 $htgen->patch_source("$FindBin::RealBin/../rbhash.c");

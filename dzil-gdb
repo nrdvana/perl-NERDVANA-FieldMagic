@@ -1,0 +1,17 @@
+#! /usr/bin/env perl
+@ARGV && -f $ARGV[0] or die "Expected name of script to run under gdb";
+my $out= `dzil build`;
+my ($dir)= ($out =~ /built in (\S*)/);
+-d $dir or die "Can't determine build dir";
+print "chdir $dir\n";
+chdir($dir) or die "Failed chdir $dir";
+print "perl Makefile.PL\n";
+system('perl','Makefile.PL') == 0 or die "Failed building makefile";
+my $makefile= do { open my $fh, '<', 'Makefile' or die "open(Makefile):$!"; local $/= undef; <$fh> };
+$makefile =~ s/(FLAGS.*?)(-O2)/$1-O0/g or warn "Can't change -O2 to -O0";
+$makefile =~ s/(FLAGS.*?)(-g)(?=\W)/$1-g3/g or warn "Can't change -g to -g3";
+do { open my $fh, '>', 'Makefile' or die "open(Makefile):$!"; $fh->print($makefile); $fh->close; };
+print "make\n";
+system('make') == 0 or die "Failed running make";
+$ENV{PERLLIB}="blib/lib:blib/arch:lib";
+system('gdb', '--args', $^X, @ARGV);

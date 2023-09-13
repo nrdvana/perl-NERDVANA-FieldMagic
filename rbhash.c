@@ -1,11 +1,11 @@
-/* BEGIN GENERATED NF_RBHASH IMPLEMENTATION */
-static void nf_rbhash_rb_balance_7(uint8_t *rbhash, uint8_t *parents);
-static void nf_rbhash_rb_balance_15(uint16_t *rbhash, uint16_t *parents);
-static void nf_rbhash_rb_balance_31(uint32_t *rbhash, uint32_t *parents);
+/* BEGIN GENERATED FM_RBHASH IMPLEMENTATION */
+static void fm_rbhash_rb_balance_7(uint8_t *rbhash, uint8_t *parents);
+static void fm_rbhash_rb_balance_15(uint16_t *rbhash, uint16_t *parents);
+static void fm_rbhash_rb_balance_31(uint32_t *rbhash, uint32_t *parents);
 // Look up the search_key in the hashtable, walk the tree of conflicts, and
 // return the element index which matched.
-size_t nf_fieldset_rbhash_find(void *rbhash, size_t capacity, nf_fieldinfo_t ** elemdata, nf_fieldinfo_key_t * search_key) {
-   size_t n_buckets= NF_RBHASH_TABLE_BUCKETS(capacity);
+size_t fm_fieldset_rbhash_find(void *rbhash, size_t capacity, fm_fieldinfo_t ** elemdata, fm_fieldinfo_key_t * search_key) {
+   size_t n_buckets= FM_RBHASH_TABLE_BUCKETS(capacity);
    size_t el_hashcode, key_hashcode;
    int cmp;
    if (!n_buckets) return 0;
@@ -57,7 +57,7 @@ size_t nf_fieldset_rbhash_find(void *rbhash, size_t capacity, nf_fieldinfo_t ** 
 #define RBHASH_SET_BLACK(n)   (rbhash[(n)*2]= rbhash[(n)*2] >> 1 << 1)
 // balance a tree from parents[0] upward.  (parents is terminated by a 0 value)
 // nodes is the full array of tree nodes.
-static void nf_rbhash_rb_balance_7(uint8_t *rbhash, uint8_t *parents) {
+static void fm_rbhash_rb_balance_7(uint8_t *rbhash, uint8_t *parents) {
    uint8_t pos= *parents--, newpos, parent;
    // if current is a black node, no rotations needed
    while (pos && RBHASH_IS_RED(pos)) {
@@ -141,7 +141,7 @@ static void nf_rbhash_rb_balance_7(uint8_t *rbhash, uint8_t *parents) {
 }
 // Gets called recursively to verify the Red/Black properties of the subtree at 'node'
 // Returns a message describing what was wrong, or NULL on success.
-static bool nf_rbhash_treecheck_7(uint8_t *rbhash, uint8_t max_node, uint8_t node, int depth,
+static bool fm_rbhash_treecheck_7(uint8_t *rbhash, uint8_t max_node, uint8_t node, int depth,
    int *depth_out, int *blackcount_out,
    const char **err_out, uint8_t *err_node_out
 ) {
@@ -174,7 +174,7 @@ static bool nf_rbhash_treecheck_7(uint8_t *rbhash, uint8_t max_node, uint8_t nod
             if (err_node_out) *err_node_out= node;
             return false;
          }
-         else if (!nf_rbhash_treecheck_7(rbhash, max_node, subtree, depth,
+         else if (!fm_rbhash_treecheck_7(rbhash, max_node, subtree, depth,
             depth_out, blackcount+i, err_out, err_node_out))
             return false;
       }
@@ -188,7 +188,7 @@ static bool nf_rbhash_treecheck_7(uint8_t *rbhash, uint8_t max_node, uint8_t nod
       *blackcount_out= blackcount[0] + (RBHASH_IS_RED(node) ^ 1);
    return true;
 }
-static size_t nf_rbhash_treeprint_7(uint8_t *rbhash, uint8_t max_node, uint8_t node, uint8_t mark_node, FILE * out) {
+static size_t fm_rbhash_treeprint_7(uint8_t *rbhash, uint8_t max_node, uint8_t node, uint8_t mark_node, FILE * out) {
    uint8_t node_path[ 1+16 ];
    bool cycle;
    int i, pos, step= 0;
@@ -252,7 +252,7 @@ static size_t nf_rbhash_treeprint_7(uint8_t *rbhash, uint8_t max_node, uint8_t n
 }
 // balance a tree from parents[0] upward.  (parents is terminated by a 0 value)
 // nodes is the full array of tree nodes.
-static void nf_rbhash_rb_balance_15(uint16_t *rbhash, uint16_t *parents) {
+static void fm_rbhash_rb_balance_15(uint16_t *rbhash, uint16_t *parents) {
    uint16_t pos= *parents--, newpos, parent;
    // if current is a black node, no rotations needed
    while (pos && RBHASH_IS_RED(pos)) {
@@ -336,7 +336,7 @@ static void nf_rbhash_rb_balance_15(uint16_t *rbhash, uint16_t *parents) {
 }
 // Gets called recursively to verify the Red/Black properties of the subtree at 'node'
 // Returns a message describing what was wrong, or NULL on success.
-static bool nf_rbhash_treecheck_15(uint16_t *rbhash, uint16_t max_node, uint16_t node, int depth,
+static bool fm_rbhash_treecheck_15(uint16_t *rbhash, uint16_t max_node, uint16_t node, int depth,
    int *depth_out, int *blackcount_out,
    const char **err_out, uint16_t *err_node_out
 ) {
@@ -369,7 +369,7 @@ static bool nf_rbhash_treecheck_15(uint16_t *rbhash, uint16_t max_node, uint16_t
             if (err_node_out) *err_node_out= node;
             return false;
          }
-         else if (!nf_rbhash_treecheck_15(rbhash, max_node, subtree, depth,
+         else if (!fm_rbhash_treecheck_15(rbhash, max_node, subtree, depth,
             depth_out, blackcount+i, err_out, err_node_out))
             return false;
       }
@@ -383,7 +383,7 @@ static bool nf_rbhash_treecheck_15(uint16_t *rbhash, uint16_t max_node, uint16_t
       *blackcount_out= blackcount[0] + (RBHASH_IS_RED(node) ^ 1);
    return true;
 }
-static size_t nf_rbhash_treeprint_15(uint16_t *rbhash, uint16_t max_node, uint16_t node, uint16_t mark_node, FILE * out) {
+static size_t fm_rbhash_treeprint_15(uint16_t *rbhash, uint16_t max_node, uint16_t node, uint16_t mark_node, FILE * out) {
    uint16_t node_path[ 1+32 ];
    bool cycle;
    int i, pos, step= 0;
@@ -447,7 +447,7 @@ static size_t nf_rbhash_treeprint_15(uint16_t *rbhash, uint16_t max_node, uint16
 }
 // balance a tree from parents[0] upward.  (parents is terminated by a 0 value)
 // nodes is the full array of tree nodes.
-static void nf_rbhash_rb_balance_31(uint32_t *rbhash, uint32_t *parents) {
+static void fm_rbhash_rb_balance_31(uint32_t *rbhash, uint32_t *parents) {
    uint32_t pos= *parents--, newpos, parent;
    // if current is a black node, no rotations needed
    while (pos && RBHASH_IS_RED(pos)) {
@@ -531,7 +531,7 @@ static void nf_rbhash_rb_balance_31(uint32_t *rbhash, uint32_t *parents) {
 }
 // Gets called recursively to verify the Red/Black properties of the subtree at 'node'
 // Returns a message describing what was wrong, or NULL on success.
-static bool nf_rbhash_treecheck_31(uint32_t *rbhash, uint32_t max_node, uint32_t node, int depth,
+static bool fm_rbhash_treecheck_31(uint32_t *rbhash, uint32_t max_node, uint32_t node, int depth,
    int *depth_out, int *blackcount_out,
    const char **err_out, uint32_t *err_node_out
 ) {
@@ -564,7 +564,7 @@ static bool nf_rbhash_treecheck_31(uint32_t *rbhash, uint32_t max_node, uint32_t
             if (err_node_out) *err_node_out= node;
             return false;
          }
-         else if (!nf_rbhash_treecheck_31(rbhash, max_node, subtree, depth,
+         else if (!fm_rbhash_treecheck_31(rbhash, max_node, subtree, depth,
             depth_out, blackcount+i, err_out, err_node_out))
             return false;
       }
@@ -578,7 +578,7 @@ static bool nf_rbhash_treecheck_31(uint32_t *rbhash, uint32_t max_node, uint32_t
       *blackcount_out= blackcount[0] + (RBHASH_IS_RED(node) ^ 1);
    return true;
 }
-static size_t nf_rbhash_treeprint_31(uint32_t *rbhash, uint32_t max_node, uint32_t node, uint32_t mark_node, FILE * out) {
+static size_t fm_rbhash_treeprint_31(uint32_t *rbhash, uint32_t max_node, uint32_t node, uint32_t mark_node, FILE * out) {
    uint32_t node_path[ 1+64 ];
    bool cycle;
    int i, pos, step= 0;
@@ -640,8 +640,8 @@ static size_t nf_rbhash_treeprint_31(uint32_t *rbhash, uint32_t max_node, uint32
    }
    return nodecount;
 }
-bool nf_fieldset_rbhash_reindex(void *rbhash, size_t capacity, nf_fieldinfo_t ** elemdata, size_t el_i, size_t last_i) {
-   size_t n_buckets= NF_RBHASH_TABLE_BUCKETS(capacity);
+bool fm_fieldset_rbhash_reindex(void *rbhash, size_t capacity, fm_fieldinfo_t ** elemdata, size_t el_i, size_t last_i) {
+   size_t n_buckets= FM_RBHASH_TABLE_BUCKETS(capacity);
    size_t el_hashcode, new_hashcode, pos;
    IV cmp;
    if (el_i < 1 || last_i > capacity || !n_buckets)
@@ -678,16 +678,16 @@ bool nf_fieldset_rbhash_reindex(void *rbhash, size_t capacity, nf_fieldinfo_t **
             ((uint8_t *)rbhash)[ el_i*2 ]= 1;
             if (pos > 1) { // no need to balance unless more than 1 parent
                parents[0]= 0; // mark end of list
-               nf_rbhash_rb_balance_7((uint8_t *)rbhash, parents+pos);
+               fm_rbhash_rb_balance_7((uint8_t *)rbhash, parents+pos);
                *bucket= parents[1]; // may have changed after tree balance
                // tree root is always black
                ((uint8_t *)rbhash)[ parents[1]*2 ]= ((uint8_t *)rbhash)[ parents[1]*2 ] >> 1 << 1; 
             }
          }
-         if (!nf_rbhash_treecheck_7(rbhash, el_i, *bucket, 0,
+         if (!fm_rbhash_treecheck_7(rbhash, el_i, *bucket, 0,
             NULL, NULL, &err_msg, &err_node
          )) {
-            nf_rbhash_treeprint_7(rbhash, capacity, *bucket, err_node, stderr);
+            fm_rbhash_treeprint_7(rbhash, capacity, *bucket, err_node, stderr);
             warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
             return false;
          }
@@ -726,16 +726,16 @@ bool nf_fieldset_rbhash_reindex(void *rbhash, size_t capacity, nf_fieldinfo_t **
             ((uint16_t *)rbhash)[ el_i*2 ]= 1;
             if (pos > 1) { // no need to balance unless more than 1 parent
                parents[0]= 0; // mark end of list
-               nf_rbhash_rb_balance_15((uint16_t *)rbhash, parents+pos);
+               fm_rbhash_rb_balance_15((uint16_t *)rbhash, parents+pos);
                *bucket= parents[1]; // may have changed after tree balance
                // tree root is always black
                ((uint16_t *)rbhash)[ parents[1]*2 ]= ((uint16_t *)rbhash)[ parents[1]*2 ] >> 1 << 1; 
             }
          }
-         if (!nf_rbhash_treecheck_15(rbhash, el_i, *bucket, 0,
+         if (!fm_rbhash_treecheck_15(rbhash, el_i, *bucket, 0,
             NULL, NULL, &err_msg, &err_node
          )) {
-            nf_rbhash_treeprint_15(rbhash, capacity, *bucket, err_node, stderr);
+            fm_rbhash_treeprint_15(rbhash, capacity, *bucket, err_node, stderr);
             warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
             return false;
          }
@@ -774,16 +774,16 @@ bool nf_fieldset_rbhash_reindex(void *rbhash, size_t capacity, nf_fieldinfo_t **
             ((uint32_t *)rbhash)[ el_i*2 ]= 1;
             if (pos > 1) { // no need to balance unless more than 1 parent
                parents[0]= 0; // mark end of list
-               nf_rbhash_rb_balance_31((uint32_t *)rbhash, parents+pos);
+               fm_rbhash_rb_balance_31((uint32_t *)rbhash, parents+pos);
                *bucket= parents[1]; // may have changed after tree balance
                // tree root is always black
                ((uint32_t *)rbhash)[ parents[1]*2 ]= ((uint32_t *)rbhash)[ parents[1]*2 ] >> 1 << 1; 
             }
          }
-         if (!nf_rbhash_treecheck_31(rbhash, el_i, *bucket, 0,
+         if (!fm_rbhash_treecheck_31(rbhash, el_i, *bucket, 0,
             NULL, NULL, &err_msg, &err_node
          )) {
-            nf_rbhash_treeprint_31(rbhash, capacity, *bucket, err_node, stderr);
+            fm_rbhash_treeprint_31(rbhash, capacity, *bucket, err_node, stderr);
             warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
             return false;
          }
@@ -794,8 +794,8 @@ bool nf_fieldset_rbhash_reindex(void *rbhash, size_t capacity, nf_fieldinfo_t **
 }
 // Verify that every filled bucket refers to a valid tree,
 // and that every node can be found.
-static bool nf_fieldset_rbhash_structcheck_7(pTHX_ uint8_t *rbhash, size_t capacity, nf_fieldinfo_t ** elemdata, size_t max_el) {
-   size_t n_buckets= NF_RBHASH_TABLE_BUCKETS(capacity), node;
+static bool fm_fieldset_rbhash_structcheck_7(pTHX_ uint8_t *rbhash, size_t capacity, fm_fieldinfo_t ** elemdata, size_t max_el) {
+   size_t n_buckets= FM_RBHASH_TABLE_BUCKETS(capacity), node;
    size_t el_hashcode, i_hashcode;
    int cmp, i, depth, blackcount;
    const char *err_msg;
@@ -806,10 +806,10 @@ static bool nf_fieldset_rbhash_structcheck_7(pTHX_ uint8_t *rbhash, size_t capac
          warn("Bucket %ld refers to element %ld which is greater than max_el %ld", (long)(bucket-table), (long)*bucket, (long)max_el);
          success= false;
       } else if (*bucket) {
-         if (!nf_rbhash_treecheck_7(rbhash, max_el, *bucket, 0,
+         if (!fm_rbhash_treecheck_7(rbhash, max_el, *bucket, 0,
             NULL, &blackcount, &err_msg, &err_node
          )) {
-            nf_rbhash_treeprint_7(rbhash, max_el, *bucket, err_node, stderr);
+            fm_rbhash_treeprint_7(rbhash, max_el, *bucket, err_node, stderr);
             warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
             success= false;
          }
@@ -851,8 +851,8 @@ static bool nf_fieldset_rbhash_structcheck_7(pTHX_ uint8_t *rbhash, size_t capac
 }
 // Verify that every filled bucket refers to a valid tree,
 // and that every node can be found.
-static bool nf_fieldset_rbhash_structcheck_15(pTHX_ uint16_t *rbhash, size_t capacity, nf_fieldinfo_t ** elemdata, size_t max_el) {
-   size_t n_buckets= NF_RBHASH_TABLE_BUCKETS(capacity), node;
+static bool fm_fieldset_rbhash_structcheck_15(pTHX_ uint16_t *rbhash, size_t capacity, fm_fieldinfo_t ** elemdata, size_t max_el) {
+   size_t n_buckets= FM_RBHASH_TABLE_BUCKETS(capacity), node;
    size_t el_hashcode, i_hashcode;
    int cmp, i, depth, blackcount;
    const char *err_msg;
@@ -863,10 +863,10 @@ static bool nf_fieldset_rbhash_structcheck_15(pTHX_ uint16_t *rbhash, size_t cap
          warn("Bucket %ld refers to element %ld which is greater than max_el %ld", (long)(bucket-table), (long)*bucket, (long)max_el);
          success= false;
       } else if (*bucket) {
-         if (!nf_rbhash_treecheck_15(rbhash, max_el, *bucket, 0,
+         if (!fm_rbhash_treecheck_15(rbhash, max_el, *bucket, 0,
             NULL, &blackcount, &err_msg, &err_node
          )) {
-            nf_rbhash_treeprint_15(rbhash, max_el, *bucket, err_node, stderr);
+            fm_rbhash_treeprint_15(rbhash, max_el, *bucket, err_node, stderr);
             warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
             success= false;
          }
@@ -908,8 +908,8 @@ static bool nf_fieldset_rbhash_structcheck_15(pTHX_ uint16_t *rbhash, size_t cap
 }
 // Verify that every filled bucket refers to a valid tree,
 // and that every node can be found.
-static bool nf_fieldset_rbhash_structcheck_31(pTHX_ uint32_t *rbhash, size_t capacity, nf_fieldinfo_t ** elemdata, size_t max_el) {
-   size_t n_buckets= NF_RBHASH_TABLE_BUCKETS(capacity), node;
+static bool fm_fieldset_rbhash_structcheck_31(pTHX_ uint32_t *rbhash, size_t capacity, fm_fieldinfo_t ** elemdata, size_t max_el) {
+   size_t n_buckets= FM_RBHASH_TABLE_BUCKETS(capacity), node;
    size_t el_hashcode, i_hashcode;
    int cmp, i, depth, blackcount;
    const char *err_msg;
@@ -920,10 +920,10 @@ static bool nf_fieldset_rbhash_structcheck_31(pTHX_ uint32_t *rbhash, size_t cap
          warn("Bucket %ld refers to element %ld which is greater than max_el %ld", (long)(bucket-table), (long)*bucket, (long)max_el);
          success= false;
       } else if (*bucket) {
-         if (!nf_rbhash_treecheck_31(rbhash, max_el, *bucket, 0,
+         if (!fm_rbhash_treecheck_31(rbhash, max_el, *bucket, 0,
             NULL, &blackcount, &err_msg, &err_node
          )) {
-            nf_rbhash_treeprint_31(rbhash, max_el, *bucket, err_node, stderr);
+            fm_rbhash_treeprint_31(rbhash, max_el, *bucket, err_node, stderr);
             warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
             success= false;
          }
@@ -965,17 +965,17 @@ static bool nf_fieldset_rbhash_structcheck_31(pTHX_ uint32_t *rbhash, size_t cap
 }
 // Verify that every filled bucket refers to a valid tree,
 // and that every element can be found.
-bool nf_fieldset_rbhash_structcheck(pTHX_ void* rbhash, size_t capacity, nf_fieldinfo_t ** elemdata, size_t max_el) {
+bool fm_fieldset_rbhash_structcheck(pTHX_ void* rbhash, size_t capacity, fm_fieldinfo_t ** elemdata, size_t max_el) {
    if (capacity <= 0x7F)
-      return nf_fieldset_rbhash_structcheck_7(aTHX_ (uint8_t*)rbhash, capacity, elemdata, max_el);
+      return fm_fieldset_rbhash_structcheck_7(aTHX_ (uint8_t*)rbhash, capacity, elemdata, max_el);
    if (capacity <= 0x7FFF)
-      return nf_fieldset_rbhash_structcheck_15(aTHX_ (uint16_t*)rbhash, capacity, elemdata, max_el);
+      return fm_fieldset_rbhash_structcheck_15(aTHX_ (uint16_t*)rbhash, capacity, elemdata, max_el);
    if (capacity <= 0x7FFFFFFF)
-      return nf_fieldset_rbhash_structcheck_31(aTHX_ (uint32_t*)rbhash, capacity, elemdata, max_el);
+      return fm_fieldset_rbhash_structcheck_31(aTHX_ (uint32_t*)rbhash, capacity, elemdata, max_el);
    return false;
 }
-void nf_rbhash_print(void *rbhash, size_t capacity, FILE *out) {
-   size_t n_buckets= NF_RBHASH_TABLE_BUCKETS(capacity), node, used= 0, collision= 0;
+void fm_rbhash_print(void *rbhash, size_t capacity, FILE *out) {
+   size_t n_buckets= FM_RBHASH_TABLE_BUCKETS(capacity), node, used= 0, collision= 0;
    fprintf(out, "# rbhash for %ld elements, %ld hash buckets\n", (long) capacity, (long) n_buckets);
    if (capacity <= 0x7F ) {
       uint8_t *nodes= (uint8_t*) rbhash;
@@ -986,7 +986,7 @@ void nf_rbhash_print(void *rbhash, size_t capacity, FILE *out) {
             fprintf(out, "# bucket 0x%lx\n", i);
          if (table[i]) {
             ++used;
-            collision += nf_rbhash_treeprint_7(rbhash, capacity, table[i], 0, out) - 1;
+            collision += fm_rbhash_treeprint_7(rbhash, capacity, table[i], 0, out) - 1;
          } else
             fprintf(out, "-\n");
       }
@@ -1000,7 +1000,7 @@ void nf_rbhash_print(void *rbhash, size_t capacity, FILE *out) {
             fprintf(out, "# bucket 0x%lx\n", i);
          if (table[i]) {
             ++used;
-            collision += nf_rbhash_treeprint_15(rbhash, capacity, table[i], 0, out) - 1;
+            collision += fm_rbhash_treeprint_15(rbhash, capacity, table[i], 0, out) - 1;
          } else
             fprintf(out, "-\n");
       }
@@ -1014,7 +1014,7 @@ void nf_rbhash_print(void *rbhash, size_t capacity, FILE *out) {
             fprintf(out, "# bucket 0x%lx\n", i);
          if (table[i]) {
             ++used;
-            collision += nf_rbhash_treeprint_31(rbhash, capacity, table[i], 0, out) - 1;
+            collision += fm_rbhash_treeprint_31(rbhash, capacity, table[i], 0, out) - 1;
          } else
             fprintf(out, "-\n");
       }
@@ -1023,8 +1023,8 @@ void nf_rbhash_print(void *rbhash, size_t capacity, FILE *out) {
 }
 // Look up the search_key in the hashtable, walk the tree of conflicts, and
 // return the element index which matched.
-size_t nf_fieldstorage_map_rbhash_find(void *rbhash, size_t capacity, nf_fieldstorage_t ** elemdata, nf_fieldset_t * search_key) {
-   size_t n_buckets= NF_RBHASH_TABLE_BUCKETS(capacity);
+size_t fm_fieldstorage_map_rbhash_find(void *rbhash, size_t capacity, fm_fieldstorage_t ** elemdata, fm_fieldset_t * search_key) {
+   size_t n_buckets= FM_RBHASH_TABLE_BUCKETS(capacity);
    size_t el_hashcode, key_hashcode;
    int cmp;
    if (!n_buckets) return 0;
@@ -1067,8 +1067,8 @@ size_t nf_fieldstorage_map_rbhash_find(void *rbhash, size_t capacity, nf_fieldst
    }
    return 0;
 }
-bool nf_fieldstorage_map_rbhash_reindex(void *rbhash, size_t capacity, nf_fieldstorage_t ** elemdata, size_t el_i, size_t last_i) {
-   size_t n_buckets= NF_RBHASH_TABLE_BUCKETS(capacity);
+bool fm_fieldstorage_map_rbhash_reindex(void *rbhash, size_t capacity, fm_fieldstorage_t ** elemdata, size_t el_i, size_t last_i) {
+   size_t n_buckets= FM_RBHASH_TABLE_BUCKETS(capacity);
    size_t el_hashcode, new_hashcode, pos;
    IV cmp;
    if (el_i < 1 || last_i > capacity || !n_buckets)
@@ -1105,16 +1105,16 @@ bool nf_fieldstorage_map_rbhash_reindex(void *rbhash, size_t capacity, nf_fields
             ((uint8_t *)rbhash)[ el_i*2 ]= 1;
             if (pos > 1) { // no need to balance unless more than 1 parent
                parents[0]= 0; // mark end of list
-               nf_rbhash_rb_balance_7((uint8_t *)rbhash, parents+pos);
+               fm_rbhash_rb_balance_7((uint8_t *)rbhash, parents+pos);
                *bucket= parents[1]; // may have changed after tree balance
                // tree root is always black
                ((uint8_t *)rbhash)[ parents[1]*2 ]= ((uint8_t *)rbhash)[ parents[1]*2 ] >> 1 << 1; 
             }
          }
-         if (!nf_rbhash_treecheck_7(rbhash, el_i, *bucket, 0,
+         if (!fm_rbhash_treecheck_7(rbhash, el_i, *bucket, 0,
             NULL, NULL, &err_msg, &err_node
          )) {
-            nf_rbhash_treeprint_7(rbhash, capacity, *bucket, err_node, stderr);
+            fm_rbhash_treeprint_7(rbhash, capacity, *bucket, err_node, stderr);
             warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
             return false;
          }
@@ -1153,16 +1153,16 @@ bool nf_fieldstorage_map_rbhash_reindex(void *rbhash, size_t capacity, nf_fields
             ((uint16_t *)rbhash)[ el_i*2 ]= 1;
             if (pos > 1) { // no need to balance unless more than 1 parent
                parents[0]= 0; // mark end of list
-               nf_rbhash_rb_balance_15((uint16_t *)rbhash, parents+pos);
+               fm_rbhash_rb_balance_15((uint16_t *)rbhash, parents+pos);
                *bucket= parents[1]; // may have changed after tree balance
                // tree root is always black
                ((uint16_t *)rbhash)[ parents[1]*2 ]= ((uint16_t *)rbhash)[ parents[1]*2 ] >> 1 << 1; 
             }
          }
-         if (!nf_rbhash_treecheck_15(rbhash, el_i, *bucket, 0,
+         if (!fm_rbhash_treecheck_15(rbhash, el_i, *bucket, 0,
             NULL, NULL, &err_msg, &err_node
          )) {
-            nf_rbhash_treeprint_15(rbhash, capacity, *bucket, err_node, stderr);
+            fm_rbhash_treeprint_15(rbhash, capacity, *bucket, err_node, stderr);
             warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
             return false;
          }
@@ -1201,16 +1201,16 @@ bool nf_fieldstorage_map_rbhash_reindex(void *rbhash, size_t capacity, nf_fields
             ((uint32_t *)rbhash)[ el_i*2 ]= 1;
             if (pos > 1) { // no need to balance unless more than 1 parent
                parents[0]= 0; // mark end of list
-               nf_rbhash_rb_balance_31((uint32_t *)rbhash, parents+pos);
+               fm_rbhash_rb_balance_31((uint32_t *)rbhash, parents+pos);
                *bucket= parents[1]; // may have changed after tree balance
                // tree root is always black
                ((uint32_t *)rbhash)[ parents[1]*2 ]= ((uint32_t *)rbhash)[ parents[1]*2 ] >> 1 << 1; 
             }
          }
-         if (!nf_rbhash_treecheck_31(rbhash, el_i, *bucket, 0,
+         if (!fm_rbhash_treecheck_31(rbhash, el_i, *bucket, 0,
             NULL, NULL, &err_msg, &err_node
          )) {
-            nf_rbhash_treeprint_31(rbhash, capacity, *bucket, err_node, stderr);
+            fm_rbhash_treeprint_31(rbhash, capacity, *bucket, err_node, stderr);
             warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
             return false;
          }
@@ -1221,8 +1221,8 @@ bool nf_fieldstorage_map_rbhash_reindex(void *rbhash, size_t capacity, nf_fields
 }
 // Verify that every filled bucket refers to a valid tree,
 // and that every node can be found.
-static bool nf_fieldstorage_map_rbhash_structcheck_7(pTHX_ uint8_t *rbhash, size_t capacity, nf_fieldstorage_t ** elemdata, size_t max_el) {
-   size_t n_buckets= NF_RBHASH_TABLE_BUCKETS(capacity), node;
+static bool fm_fieldstorage_map_rbhash_structcheck_7(pTHX_ uint8_t *rbhash, size_t capacity, fm_fieldstorage_t ** elemdata, size_t max_el) {
+   size_t n_buckets= FM_RBHASH_TABLE_BUCKETS(capacity), node;
    size_t el_hashcode, i_hashcode;
    int cmp, i, depth, blackcount;
    const char *err_msg;
@@ -1233,10 +1233,10 @@ static bool nf_fieldstorage_map_rbhash_structcheck_7(pTHX_ uint8_t *rbhash, size
          warn("Bucket %ld refers to element %ld which is greater than max_el %ld", (long)(bucket-table), (long)*bucket, (long)max_el);
          success= false;
       } else if (*bucket) {
-         if (!nf_rbhash_treecheck_7(rbhash, max_el, *bucket, 0,
+         if (!fm_rbhash_treecheck_7(rbhash, max_el, *bucket, 0,
             NULL, &blackcount, &err_msg, &err_node
          )) {
-            nf_rbhash_treeprint_7(rbhash, max_el, *bucket, err_node, stderr);
+            fm_rbhash_treeprint_7(rbhash, max_el, *bucket, err_node, stderr);
             warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
             success= false;
          }
@@ -1278,8 +1278,8 @@ static bool nf_fieldstorage_map_rbhash_structcheck_7(pTHX_ uint8_t *rbhash, size
 }
 // Verify that every filled bucket refers to a valid tree,
 // and that every node can be found.
-static bool nf_fieldstorage_map_rbhash_structcheck_15(pTHX_ uint16_t *rbhash, size_t capacity, nf_fieldstorage_t ** elemdata, size_t max_el) {
-   size_t n_buckets= NF_RBHASH_TABLE_BUCKETS(capacity), node;
+static bool fm_fieldstorage_map_rbhash_structcheck_15(pTHX_ uint16_t *rbhash, size_t capacity, fm_fieldstorage_t ** elemdata, size_t max_el) {
+   size_t n_buckets= FM_RBHASH_TABLE_BUCKETS(capacity), node;
    size_t el_hashcode, i_hashcode;
    int cmp, i, depth, blackcount;
    const char *err_msg;
@@ -1290,10 +1290,10 @@ static bool nf_fieldstorage_map_rbhash_structcheck_15(pTHX_ uint16_t *rbhash, si
          warn("Bucket %ld refers to element %ld which is greater than max_el %ld", (long)(bucket-table), (long)*bucket, (long)max_el);
          success= false;
       } else if (*bucket) {
-         if (!nf_rbhash_treecheck_15(rbhash, max_el, *bucket, 0,
+         if (!fm_rbhash_treecheck_15(rbhash, max_el, *bucket, 0,
             NULL, &blackcount, &err_msg, &err_node
          )) {
-            nf_rbhash_treeprint_15(rbhash, max_el, *bucket, err_node, stderr);
+            fm_rbhash_treeprint_15(rbhash, max_el, *bucket, err_node, stderr);
             warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
             success= false;
          }
@@ -1335,8 +1335,8 @@ static bool nf_fieldstorage_map_rbhash_structcheck_15(pTHX_ uint16_t *rbhash, si
 }
 // Verify that every filled bucket refers to a valid tree,
 // and that every node can be found.
-static bool nf_fieldstorage_map_rbhash_structcheck_31(pTHX_ uint32_t *rbhash, size_t capacity, nf_fieldstorage_t ** elemdata, size_t max_el) {
-   size_t n_buckets= NF_RBHASH_TABLE_BUCKETS(capacity), node;
+static bool fm_fieldstorage_map_rbhash_structcheck_31(pTHX_ uint32_t *rbhash, size_t capacity, fm_fieldstorage_t ** elemdata, size_t max_el) {
+   size_t n_buckets= FM_RBHASH_TABLE_BUCKETS(capacity), node;
    size_t el_hashcode, i_hashcode;
    int cmp, i, depth, blackcount;
    const char *err_msg;
@@ -1347,10 +1347,10 @@ static bool nf_fieldstorage_map_rbhash_structcheck_31(pTHX_ uint32_t *rbhash, si
          warn("Bucket %ld refers to element %ld which is greater than max_el %ld", (long)(bucket-table), (long)*bucket, (long)max_el);
          success= false;
       } else if (*bucket) {
-         if (!nf_rbhash_treecheck_31(rbhash, max_el, *bucket, 0,
+         if (!fm_rbhash_treecheck_31(rbhash, max_el, *bucket, 0,
             NULL, &blackcount, &err_msg, &err_node
          )) {
-            nf_rbhash_treeprint_31(rbhash, max_el, *bucket, err_node, stderr);
+            fm_rbhash_treeprint_31(rbhash, max_el, *bucket, err_node, stderr);
             warn("Tree rooted at %ld is corrupt, %s at node %d", (long) *bucket, err_msg, (long) err_node);
             success= false;
          }
@@ -1392,13 +1392,13 @@ static bool nf_fieldstorage_map_rbhash_structcheck_31(pTHX_ uint32_t *rbhash, si
 }
 // Verify that every filled bucket refers to a valid tree,
 // and that every element can be found.
-bool nf_fieldstorage_map_rbhash_structcheck(pTHX_ void* rbhash, size_t capacity, nf_fieldstorage_t ** elemdata, size_t max_el) {
+bool fm_fieldstorage_map_rbhash_structcheck(pTHX_ void* rbhash, size_t capacity, fm_fieldstorage_t ** elemdata, size_t max_el) {
    if (capacity <= 0x7F)
-      return nf_fieldstorage_map_rbhash_structcheck_7(aTHX_ (uint8_t*)rbhash, capacity, elemdata, max_el);
+      return fm_fieldstorage_map_rbhash_structcheck_7(aTHX_ (uint8_t*)rbhash, capacity, elemdata, max_el);
    if (capacity <= 0x7FFF)
-      return nf_fieldstorage_map_rbhash_structcheck_15(aTHX_ (uint16_t*)rbhash, capacity, elemdata, max_el);
+      return fm_fieldstorage_map_rbhash_structcheck_15(aTHX_ (uint16_t*)rbhash, capacity, elemdata, max_el);
    if (capacity <= 0x7FFFFFFF)
-      return nf_fieldstorage_map_rbhash_structcheck_31(aTHX_ (uint32_t*)rbhash, capacity, elemdata, max_el);
+      return fm_fieldstorage_map_rbhash_structcheck_31(aTHX_ (uint32_t*)rbhash, capacity, elemdata, max_el);
    return false;
 }
-/* END GENERATED NF_RBHASH IMPLEMENTATION */
+/* END GENERATED FM_RBHASH IMPLEMENTATION */

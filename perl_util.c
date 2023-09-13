@@ -1,4 +1,4 @@
-static SV *nf_perlutil_newSVivpv(pTHX_ IV ival, const char *pval) {
+static SV *fm_perlutil_newSVivpv(pTHX_ IV ival, const char *pval) {
    SV *s= newSVpv(pval, 0);
    SvUPGRADE(s, SVt_PVIV);
    SvIV_set(s, ival);
@@ -6,15 +6,15 @@ static SV *nf_perlutil_newSVivpv(pTHX_ IV ival, const char *pval) {
    return s;
 }
 #ifdef USE_ITHREADS
-  #define nf_newSVivpv(a,b) nf_perlutil_newSVivpv(aTHX,a,b)
+  #define fm_newSVivpv(a,b) fm_perlutil_newSVivpv(aTHX,a,b)
 #else
-  #define nf_newSVivpv nf_perlutil_newSVivpv
+  #define fm_newSVivpv fm_perlutil_newSVivpv
 #endif
 
 // Make one array hold all the same elements of another, respecing magic.
 // Seems like there ought to be something in perlapi to do this?
 // 'src' may be an AV or ref to AV, else src will be added as the array's only element.
-void nf_perlutil_av_assign(pTHX_ AV *dest, AV *src) {
+void fm_perlutil_av_assign(pTHX_ AV *dest, AV *src) {
    size_t i;
    SV *el, **el_p;
    av_fill(dest, av_len(src));
@@ -24,24 +24,24 @@ void nf_perlutil_av_assign(pTHX_ AV *dest, AV *src) {
       sv_setsv(el, el_p && *el_p? *el_p : &PL_sv_undef);
    }
 }
-AV* nf_perlutil_newAVav(pTHX_ AV *src) {
+AV* fm_perlutil_newAVav(pTHX_ AV *src) {
    AV *dest= newAV();
-   nf_perlutil_av_assign(aTHX_ dest, src);
+   fm_perlutil_av_assign(aTHX_ dest, src);
    return dest;
 }
 #ifdef USE_ITHREADS
-  #define nf_av_assign(a,b) nf_perlutil_av_assign(aTHX_,a,b)
-  #define nf_newAVav(a)     nf_perlutil_newAVav(aTHX_,a)
+  #define fm_av_assign(a,b) fm_perlutil_av_assign(aTHX_,a,b)
+  #define fm_newAVav(a)     fm_perlutil_newAVav(aTHX_,a)
 #else
-  #define nf_av_assign nf_perlutil_av_assign
-  #define nf_newAVav   nf_perlutil_newAVav
+  #define fm_av_assign fm_perlutil_av_assign
+  #define fm_newAVav   fm_perlutil_newAVav
 #endif
 
 // Make a hash hold all the same elemnts of another, respecting magic.
 // This is copied from newHVhv in hv.c, but without all the optimizations
 // for non-magic, because those seem likely to break across perl versions.
 // A shame that function isn't able to assign to an existing hash :-(
-void nf_perlutil_hv_assign(pTHX_ HV *dest, HV *ohv) {
+void fm_perlutil_hv_assign(pTHX_ HV *dest, HV *ohv) {
    HE *entry;
    const I32 riter = HvRITER_get(ohv);
    HE * const eiter = HvEITER_get(ohv);
@@ -62,7 +62,7 @@ void nf_perlutil_hv_assign(pTHX_ HV *dest, HV *ohv) {
    HvEITER_set(ohv, eiter);
 }
 #ifdef USE_ITHREADS
-  #define nf_hv_assign(a,b) nf_perlutil_hv_assign(aTHX_,a,b)
+  #define fm_hv_assign(a,b) fm_perlutil_hv_assign(aTHX_,a,b)
 #else
-  #define nf_hv_assign nf_perlutil_hv_assign
+  #define fm_hv_assign fm_perlutil_hv_assign
 #endif

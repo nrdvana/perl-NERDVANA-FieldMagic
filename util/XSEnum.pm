@@ -155,7 +155,7 @@ sub wrap_fn($self) {
       <<~C;
          SV* $name(pTHX_ $int_t val) {
             const char *pv= $name_fn(val);
-            return pv? nf_newSVivpv(val, pv) : newSViv(val);
+            return pv? fm_newSVivpv(val, pv) : newSViv(val);
          }
          C
    });
@@ -166,7 +166,7 @@ sub generate_boot_consts($self) {
    my $pl_prefix= $self->enum_pl_prefix;
    for ($self->enum_options->@*) {
       $self->generate_once($self->xs_boot, $pl_prefix.$_, sub { <<~C });
-         newCONSTSUB(stash, "$pl_prefix$_", nf_newSVivpv($c_prefix$_, "$pl_prefix$_"));
+         newCONSTSUB(stash, "$pl_prefix$_", fm_newSVivpv($c_prefix$_, "$pl_prefix$_"));
       C
    }
 }

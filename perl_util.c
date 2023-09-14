@@ -30,8 +30,8 @@ AV* fm_perlutil_newAVav(pTHX_ AV *src) {
    return dest;
 }
 #ifdef USE_ITHREADS
-  #define fm_av_assign(a,b) fm_perlutil_av_assign(aTHX_,a,b)
-  #define fm_newAVav(a)     fm_perlutil_newAVav(aTHX_,a)
+  #define fm_av_assign(a,b) fm_perlutil_av_assign(aTHX_ a,b)
+  #define fm_newAVav(a)     fm_perlutil_newAVav(aTHX_ a)
 #else
   #define fm_av_assign fm_perlutil_av_assign
   #define fm_newAVav   fm_perlutil_newAVav

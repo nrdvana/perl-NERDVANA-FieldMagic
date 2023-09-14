@@ -154,7 +154,7 @@ sub wrap_fn($self) {
          C
       <<~C;
          SV* $name(pTHX_ $int_t val) {
-            const char *pv= $name_fn(val);
+            const char *pv= $name_fn(aTHX_ val);
             return pv? fm_newSVivpv(val, pv) : newSViv(val);
          }
          C

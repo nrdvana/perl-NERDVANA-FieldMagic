@@ -209,7 +209,7 @@ fieldset_for_package(pkg)
       }
       RETVAL= fm_fieldset_magic_get(aTHX_ (SV*) pkg_stash, 0);
       if (!RETVAL) {
-         RETVAL= fm_fieldset_alloc(aTHX_);
+         RETVAL= fm_fieldset_alloc(aTHX);
          fm_fieldset_link_to_package(aTHX_ RETVAL, pkg_stash);
       }
    OUTPUT:
@@ -218,7 +218,7 @@ fieldset_for_package(pkg)
 fm_fieldset_t*
 new_fieldset()
    CODE:
-      RETVAL= fm_fieldset_alloc(aTHX_);
+      RETVAL= fm_fieldset_alloc(aTHX);
    OUTPUT:
       RETVAL
 
@@ -242,7 +242,7 @@ new(cls)
    INIT:
       fm_fieldset_t *self;
    PPCODE:
-      self= fm_fieldset_alloc(aTHX_);
+      self= fm_fieldset_alloc(aTHX);
       ST(0)= sv_2mortal(newRV_inc((SV*) self->wrapper));
       // Allow it to be blessed as something else
       if (strcmp(cls, "NERDVANA::FieldMagic::FieldSet") != 0)
@@ -262,7 +262,7 @@ allocate(self, count)
    fm_fieldset_t *self
    UV count
    PPCODE:
-      fm_fieldset_extend(self, count);
+      fm_fieldset_extend(aTHX_ self, count);
       XSRETURN(0);
 
 void
@@ -327,7 +327,7 @@ add_field(self, name, type, ...)
       }
       // Only generate the object if defined wantarray
       if (wantarray != G_VOID) {
-         ST(0)= sv_2mortal(fm_fieldinfo_wrap(finfo));
+         ST(0)= sv_2mortal(fm_fieldinfo_wrap(aTHX_ finfo));
          XSRETURN(1);
       }
       else XSRETURN(0);
@@ -343,7 +343,7 @@ field(fs, name)
          field_idx= SvUV(name);
          RETVAL= (field_idx < fs->field_count)? fs->fields[field_idx] : NULL;
       } else {
-         RETVAL= fm_fieldset_get_field(fs, name);
+         RETVAL= fm_fieldset_get_field(aTHX_ fs, name);
       }
    OUTPUT:
       RETVAL
@@ -387,7 +387,7 @@ has_value(self, obj)
    fm_fieldinfo_t *self
    SV *obj
    INIT:
-      fm_fieldstorage_t *stor= fm_fieldstorage_magic_get(obj, self->fieldset, 0);
+      fm_fieldstorage_t *stor= fm_fieldstorage_magic_get(aTHX_ obj, self->fieldset, 0);
    CODE:
       RETVAL= stor && fm_fieldstorage_field_exists(aTHX_ stor, self);
    OUTPUT:
@@ -398,7 +398,7 @@ get_value(self, obj)
    fm_fieldinfo_t *self
    SV *obj
    INIT:
-      fm_fieldstorage_t *stor= fm_fieldstorage_magic_get(obj, self->fieldset, 0); 
+      fm_fieldstorage_t *stor= fm_fieldstorage_magic_get(aTHX_ obj, self->fieldset, 0); 
    PPCODE:
       // TODO: handle arrayrefs and hashrefs by returning a reference
       ST(0)= !stor? &PL_sv_undef : fm_fieldstorage_field_rvalue(aTHX_ stor, self);
@@ -409,7 +409,7 @@ get_lvalue(self, obj)
    fm_fieldinfo_t *self
    SV *obj
    INIT:
-      fm_fieldstorage_t *stor= fm_fieldstorage_magic_get(obj, self->fieldset, FM_FIELDSTORAGE_AUTOCREATE); 
+      fm_fieldstorage_t *stor= fm_fieldstorage_magic_get(aTHX_ obj, self->fieldset, FM_FIELDSTORAGE_AUTOCREATE); 
    PPCODE:
       // TODO: handle arrayrefs and hashrefs by returning a reference
       ST(0)= fm_fieldstorage_field_lvalue(aTHX_ stor, self);
@@ -421,7 +421,7 @@ set_value(self, obj, val)
    SV *obj
    SV *val
    INIT:
-      fm_fieldstorage_t *stor= fm_fieldstorage_magic_get(obj, self->fieldset, FM_FIELDSTORAGE_AUTOCREATE); 
+      fm_fieldstorage_t *stor= fm_fieldstorage_magic_get(aTHX_ obj, self->fieldset, FM_FIELDSTORAGE_AUTOCREATE); 
    PPCODE:
       // TODO: handle arrayrefs and hashrefs when assigning arrays and hashes
       fm_fieldstorage_field_assign(aTHX_ stor, self, val);
@@ -434,7 +434,7 @@ install_xs_accessor(self, methodname, ...)
    INIT:
       int flags= 0;
    PPCODE:
-      fm_install_xs_accessor(methodname, self, flags);
+      fm_install_xs_accessor(aTHX_ methodname, self, flags);
 
 BOOT:
    HV* stash= gv_stashpv("NERDVANA::FieldMagic", GV_ADD);

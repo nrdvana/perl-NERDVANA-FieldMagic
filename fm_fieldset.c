@@ -64,7 +64,7 @@ static MGVTBL fm_fieldset_pkg_stash_magic_vt= {
 
 /* Allocate a fm_fieldset_t struct paired with a FieldMagic::FieldSet blessed HV.
  */
-fm_fieldset_t * fm_fieldset_alloc(pTHX_) {
+fm_fieldset_t * fm_fieldset_alloc(pTHX) {
    fm_fieldset_t *self;
    MAGIC *magic;
    SV *ref;
@@ -308,7 +308,7 @@ const char* fm_field_type_name(pTHX_ int val) {
    }
 }
 SV* fm_field_type_wrap(pTHX_ int val) {
-   const char *pv= fm_field_type_name(val);
+   const char *pv= fm_field_type_name(aTHX_ val);
    return pv? fm_newSVivpv(val, pv) : newSViv(val);
 }
 /* END GENERATED ENUM IMPLEMENTATION */

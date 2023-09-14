@@ -69,7 +69,7 @@ SV* fm_field_type_wrap(pTHX_ int val);
 
 #define FM_FIELDSET_AUTOCREATE 0x10000
 #define OR_DIE 0x20000
-fm_fieldset_t * fm_fieldset_alloc(pTHX_);
+fm_fieldset_t * fm_fieldset_alloc(pTHX);
 void fm_fieldset_extend(pTHX_ fm_fieldset_t *self, UV field_count);
 fm_fieldset_t * fm_fieldset_dup(pTHX_ fm_fieldset_t *self);
 void fm_fieldset_free(pTHX_ fm_fieldset_t *self);
